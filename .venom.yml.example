@@ -1,0 +1,7 @@
+policy:
+  max_cvss_severity: 7.0
+  block_on_kev: true
+  min_maintainers: 1
+  block_on_secrets: true
+  license_denylist:
+    - AGPL-3.0
