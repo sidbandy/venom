@@ -1,0 +1,31 @@
+{
+  "name": "@venom/core",
+  "version": "0.1.0",
+  "description": "Venom core detection engine — the single source of truth for all surfaces (CLI, VS Code, CI).",
+  "license": "ISC",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.26.0",
+    "@babel/traverse": "^7.26.0",
+    "better-sqlite3": "^12.11.1",
+    "semver": "^7.6.3",
+    "smol-toml": "^1.7.0",
+    "tar-stream": "^3.1.7",
+    "yaml": "^2.6.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/babel__traverse": "^7.20.6",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/semver": "^7.5.8",
+    "@types/tar-stream": "^3.1.3"
+  }
+}

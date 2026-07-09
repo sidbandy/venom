@@ -1,0 +1,21 @@
+{
+  "name": "@venom/cli",
+  "version": "0.1.0",
+  "description": "Venom CLI — a thin caller over @venom/core.",
+  "license": "ISC",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "venom": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "dependencies": {
+    "@venom/core": "0.1.0",
+    "commander": "^15.0.0"
+  }
+}

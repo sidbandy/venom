@@ -1,36 +1,42 @@
 {
-  "name": "venom",
+  "name": "venom-monorepo",
   "version": "0.1.0",
-  "description": "Supply chain security & health platform \u2014 bouncer, not janitor.",
-  "main": "dist/index.js",
+  "private": true,
+  "description": "Venom — supply chain security & health platform. Bouncer, not janitor.",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts"
+    "build": "tsc --build",
+    "clean": "tsc --build --clean",
+    "typecheck": "tsc --build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "venom": "node packages/cli/dist/index.js"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sidbandy/venom.git"
   },
-  "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/sidbandy/venom/issues"
   },
   "homepage": "https://github.com/sidbandy/venom#readme",
+  "engines": {
+    "node": ">=20"
+  },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
+    "@eslint/js": "^9.17.0",
     "@types/node": "^26.1.1",
-    "ts-node": "^10.9.2",
-    "typescript": "^6.0.3"
-  },
-  "dependencies": {
-    "better-sqlite3": "^12.11.1",
-    "commander": "^15.0.0"
-  },
-  "bin": {
-    "venom": "dist/index.js"
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.18.0",
+    "vitest": "^2.1.8"
   }
 }
