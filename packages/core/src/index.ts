@@ -17,6 +17,10 @@ export { VenomHttpClient, DisallowedHostError, HttpError, OfflineError } from '.
 export type { VenomHttpClientOptions, FetchFn } from './net/index';
 export { DEFAULT_ALLOWED_HOSTS } from './net/index';
 export { SqliteCache } from './cache/index';
+export { ConsoleLogger, noopLogger } from './logger';
+export type { LogLevel } from './logger';
+export { createScanContext } from './context';
+export type { CreateScanContextOptions, ScanContextHandle } from './context';
 
 // Module 1 — Dependency Inventory & SBOM.
 export {
@@ -33,3 +37,16 @@ export {
 export type { InventorySummary } from './inventory/index';
 export { generateSbom, toSpdx, toCycloneDx } from './report/sbom/index';
 export type { SbomFormat, SbomOptions, SpdxDocument, CycloneDxDocument } from './report/sbom/index';
+
+// Module 2 — Known Vulnerability Scanning.
+export {
+  scanVulnerabilities,
+  summarizeVulnerabilities,
+  OsvClient,
+  KevCatalog,
+  osvEcosystem,
+  computeBaseScore,
+  cvssFromVector,
+  severityFromScore,
+} from './vulnerabilities/index';
+export type { VulnerabilityScanResult, OsvVulnerability } from './vulnerabilities/index';

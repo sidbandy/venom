@@ -6,7 +6,7 @@ build. Kept separate from `SPEC.md` (the product definition) — this is the
 
 **Legend:** 🔴 high value · 🟡 medium · 🟢 nice-to-have · ✅ done
 
-_Last updated: 2026-07-09 (after Module 1 — Inventory & SBOM)._
+_Last updated: 2026-07-09 (after Module 2 — Known Vulnerability Scanning)._
 
 ---
 
@@ -44,6 +44,9 @@ _Last updated: 2026-07-09 (after Module 1 — Inventory & SBOM)._
 - 🟢 **Python AST scanning (Module 3).** Extend install-script/source analysis to
   Python (`setup.py`, `sitecustomize`, `.pth`) — not just JS via `@babel/parser` —
   so PyPI packages get the same structural scrutiny as npm.
+- 🟡 **CVSS v2 and v4 numeric scoring.** We compute v3.0/3.1 base scores precisely;
+  v2/v4 vectors currently fall back to the advisory's qualitative severity label.
+  Add the v2 and (more involved) v4 base-score formulas for full numeric coverage.
 
 ## Ecosystem coverage (within the v1 language boundary)
 
@@ -66,9 +69,9 @@ _Last updated: 2026-07-09 (after Module 1 — Inventory & SBOM)._
 
 ## Engineering & ops
 
-- 🔴 **Dogfood in CI.** Once Module 2 lands, run `venom audit` on Venom itself in
-  CI — the tree already carries 5 `npm audit`-flagged advisories, a perfect live
-  fixture and an honesty check.
+- 🔴 **Dogfood in CI.** Manual dogfooding already works — `venom audit` on Venom
+  itself surfaces the 5 real advisories in its own dev tree (vite/vitest/esbuild),
+  matching `npm audit`. Remaining: wire this into a CI workflow as a live check.
 - 🟡 **Coverage reporting + gate** (vitest `--coverage` / c8) and a CI workflow
   running build + lint + format + test on PRs.
 - 🟡 **Release provenance for Venom itself** (npm provenance / SLSA) — a security
