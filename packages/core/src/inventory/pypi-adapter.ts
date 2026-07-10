@@ -6,7 +6,29 @@ import { packageKey } from '../types/ecosystem';
 import type { DependencyNode, DependencyScope, ProjectRoot } from '../types/graph';
 import type { EcosystemAdapter, EcosystemParseResult } from '../types/adapter';
 import type { FetchedTarball, RegistryMetadata } from '../types/registry';
+import { extractTarball } from '../extract/tarball';
+import { popularNamesFor } from '../malicious/popular-names';
 import { normalizePypiName, toPurl } from './purl';
+
+interface PypiFile {
+  packagetype?: string;
+  url?: string;
+  filename?: string;
+  upload_time_iso_8601?: string;
+  yanked?: boolean;
+}
+
+interface PypiProject {
+  info?: {
+    version?: string;
+    author?: string;
+    maintainer?: string;
+    license?: string;
+    home_page?: string;
+    project_urls?: Record<string, string>;
+  };
+  releases?: Record<string, PypiFile[]>;
+}
 
 interface WorkingNode {
   ref: PackageRef;
@@ -62,15 +84,82 @@ export class PypiAdapter implements EcosystemAdapter {
     return toPurl(ref);
   }
 
-  // Implemented in Module 3.
-  async fetchMetadata(_ref: PackageRef, _ctx: ScanContext): Promise<RegistryMetadata | null> {
-    return null;
+  async fetchMetadata(ref: PackageRef, ctx: ScanContext): Promise<RegistryMetadata | null> {
+    const doc = await this.#projectJson(ref.name, ctx);
+    if (!doc) return null;
+
+    const version = this.#resolveVersion(doc, ref.version);
+    const files = version ? (doc.releases?.[version] ?? []) : [];
+    const publishedAt = files[0]?.upload_time_iso_8601;
+    const createdAt = earliestUpload(doc.releases);
+    const info = doc.info ?? {};
+
+    // PyPI's JSON API exposes author/maintainer as free-text, not accounts.
+    const maintainers = [info.maintainer, info.author]
+      .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+      .map((username) => ({ username }));
+    const repoUrl = info.project_urls?.Source ?? info.project_urls?.Homepage ?? info.home_page;
+
+    const meta: RegistryMetadata = {
+      ref: { ...ref, version: version ?? ref.version },
+      maintainers,
+      ...(info.version ? { latestVersion: info.version } : {}),
+      ...(publishedAt ? { publishedAt } : {}),
+      ...(createdAt ? { createdAt } : {}),
+      ...(info.license ? { license: info.license } : {}),
+      ...(repoUrl ? { repositoryUrl: repoUrl } : {}),
+      ...(info.home_page ? { homepage: info.home_page } : {}),
+      ...(doc.releases ? { allVersions: Object.keys(doc.releases) } : {}),
+    };
+    return meta;
   }
-  async fetchTarball(_ref: PackageRef, _ctx: ScanContext): Promise<FetchedTarball | null> {
-    return null;
+
+  async fetchTarball(ref: PackageRef, ctx: ScanContext): Promise<FetchedTarball | null> {
+    const doc = await this.#projectJson(ref.name, ctx);
+    if (!doc) return null;
+    const version = this.#resolveVersion(doc, ref.version);
+    if (!version) return null;
+    // Only source distributions (.tar.gz) carry setup.py and are gzip-tar; wheels
+    // are zip archives and are skipped (nothing to inspect for install scripts).
+    const sdist = (doc.releases?.[version] ?? []).find((f) => f.packagetype === 'sdist');
+    if (!sdist?.url) return null;
+    try {
+      const buffer = await ctx.http.getBuffer(sdist.url);
+      const extracted = await extractTarball(buffer);
+      return {
+        ref: { ...ref, version },
+        extractedPath: extracted.extractedPath,
+        totalBytes: extracted.totalBytes,
+        fileCount: extracted.fileCount,
+        dispose: extracted.dispose,
+      };
+    } catch (err) {
+      ctx.logger.warn(`pypi: failed to fetch/extract ${ref.name}@${version}: ${String(err)}`);
+      return null;
+    }
   }
+
   async popularNames(_ctx: ScanContext): Promise<string[]> {
-    return [];
+    return [...popularNamesFor('pypi')];
+  }
+
+  /** Fetch and cache the PyPI JSON metadata for a project. */
+  async #projectJson(name: string, ctx: ScanContext): Promise<PypiProject | null> {
+    const key = normalizePypiName(name);
+    const cached = ctx.cache.get<PypiProject>('pypi-meta', key);
+    if (cached) return cached;
+    try {
+      const doc = await ctx.http.getJson<PypiProject>(`https://pypi.org/pypi/${key}/json`);
+      ctx.cache.set('pypi-meta', key, doc, 6 * 60 * 60 * 1000);
+      return doc;
+    } catch {
+      return null;
+    }
+  }
+
+  #resolveVersion(doc: PypiProject, requested: string): string | undefined {
+    if (requested && doc.releases?.[requested]) return requested;
+    return doc.info?.version ?? (doc.releases ? Object.keys(doc.releases).at(-1) : undefined);
   }
 
   async #readText(path: string): Promise<string | null> {
@@ -173,6 +262,18 @@ export class PypiAdapter implements EcosystemAdapter {
     nodes.sort((a, b) => packageKey(a.ref).localeCompare(packageKey(b.ref)));
     return { root: { name: basename(projectRoot), path: projectRoot }, nodes };
   }
+}
+
+/** Earliest upload timestamp across all releases — a proxy for "registered on". */
+function earliestUpload(releases: Record<string, PypiFile[]> | undefined): string | undefined {
+  let earliest: string | undefined;
+  for (const files of Object.values(releases ?? {})) {
+    for (const file of files) {
+      const t = file.upload_time_iso_8601;
+      if (t && (!earliest || t < earliest)) earliest = t;
+    }
+  }
+  return earliest;
 }
 
 function poetryScope(p: PoetryPackage): DependencyScope {

@@ -16,6 +16,8 @@ export interface RegistryMetadata {
   latestVersion?: string;
   /** ISO date this specific version was published. */
   publishedAt?: string;
+  /** ISO date the package was first created/registered (recency = elevated risk). */
+  createdAt?: string;
   /** ISO date of the most recent publish of any version. */
   lastPublishAt?: string;
   weeklyDownloads?: number;

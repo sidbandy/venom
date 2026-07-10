@@ -6,6 +6,9 @@ import { packageKey } from '../types/ecosystem';
 import type { DependencyNode, DependencyScope, ProjectRoot } from '../types/graph';
 import type { EcosystemAdapter, EcosystemParseResult } from '../types/adapter';
 import type { FetchedTarball, RegistryMetadata } from '../types/registry';
+import { extractTarball } from '../extract/tarball';
+import { INSTALL_LIFECYCLE } from '../malicious/install-scripts';
+import { popularNamesFor } from '../malicious/popular-names';
 import { toPurl } from './purl';
 
 /** A mutable node used while resolving; converted to a {@link DependencyNode} at the end. */
@@ -58,6 +61,26 @@ interface PackageJson {
   peerDependencies?: Record<string, string>;
 }
 
+type LicenseField = string | { type?: string } | undefined;
+
+interface PackumentVersion {
+  version: string;
+  dist?: { tarball?: string; integrity?: string };
+  scripts?: Record<string, string>;
+  license?: LicenseField;
+  deprecated?: string;
+}
+
+interface Packument {
+  'dist-tags'?: Record<string, string>;
+  versions?: Record<string, PackumentVersion>;
+  time?: Record<string, string>;
+  maintainers?: Array<{ name?: string; email?: string }>;
+  license?: LicenseField;
+  repository?: { url?: string } | string;
+  homepage?: string;
+}
+
 const NODE_MODULES = 'node_modules/';
 
 /**
@@ -93,16 +116,84 @@ export class NpmAdapter implements EcosystemAdapter {
     return toPurl(ref);
   }
 
-  // The following are implemented in Module 3 (malicious detection); inventory
-  // (Module 1) does not need them.
-  async fetchMetadata(_ref: PackageRef, _ctx: ScanContext): Promise<RegistryMetadata | null> {
-    return null;
+  async fetchMetadata(ref: PackageRef, ctx: ScanContext): Promise<RegistryMetadata | null> {
+    const doc = await this.#packument(ref.name, ctx);
+    if (!doc) return null;
+
+    const version = this.#resolveVersion(doc, ref.version);
+    const versionInfo = version ? doc.versions?.[version] : undefined;
+    const scripts = filterLifecycle(versionInfo?.scripts);
+    const license = licenseString(versionInfo?.license ?? doc.license);
+    const repoUrl = repositoryUrl(doc.repository);
+    const publishedAt = version ? doc.time?.[version] : undefined;
+
+    const meta: RegistryMetadata = {
+      ref: { ...ref, version: version ?? ref.version },
+      maintainers: (doc.maintainers ?? []).map((m) => ({
+        ...(m.name ? { username: m.name } : {}),
+        ...(m.email ? { email: m.email } : {}),
+      })),
+      ...(doc['dist-tags']?.latest ? { latestVersion: doc['dist-tags'].latest } : {}),
+      ...(publishedAt ? { publishedAt } : {}),
+      ...(doc.time?.created ? { createdAt: doc.time.created } : {}),
+      ...(doc.time?.modified ? { lastPublishAt: doc.time.modified } : {}),
+      ...(license ? { license } : {}),
+      ...(repoUrl ? { repositoryUrl: repoUrl } : {}),
+      ...(doc.homepage ? { homepage: doc.homepage } : {}),
+      ...(versionInfo?.deprecated ? { deprecated: true } : {}),
+      hasInstallScripts: Object.keys(scripts).length > 0,
+      installScripts: scripts,
+      ...(doc.versions ? { allVersions: Object.keys(doc.versions) } : {}),
+    };
+    return meta;
   }
-  async fetchTarball(_ref: PackageRef, _ctx: ScanContext): Promise<FetchedTarball | null> {
-    return null;
+
+  async fetchTarball(ref: PackageRef, ctx: ScanContext): Promise<FetchedTarball | null> {
+    const doc = await this.#packument(ref.name, ctx);
+    if (!doc) return null;
+    const version = this.#resolveVersion(doc, ref.version);
+    if (!version) return null;
+    const tarballUrl = doc.versions?.[version]?.dist?.tarball;
+    if (!tarballUrl) return null;
+    try {
+      const buffer = await ctx.http.getBuffer(tarballUrl);
+      const extracted = await extractTarball(buffer);
+      return {
+        ref: { ...ref, version },
+        extractedPath: extracted.extractedPath,
+        totalBytes: extracted.totalBytes,
+        fileCount: extracted.fileCount,
+        dispose: extracted.dispose,
+      };
+    } catch (err) {
+      ctx.logger.warn(`npm: failed to fetch/extract ${ref.name}@${version}: ${String(err)}`);
+      return null;
+    }
   }
+
   async popularNames(_ctx: ScanContext): Promise<string[]> {
-    return [];
+    return [...popularNamesFor('npm')];
+  }
+
+  /** Fetch and cache the full npm packument for a package name. */
+  async #packument(name: string, ctx: ScanContext): Promise<Packument | null> {
+    const cached = ctx.cache.get<Packument>('npm-packument', name);
+    if (cached) return cached;
+    try {
+      const url = `https://registry.npmjs.org/${name.replace('/', '%2F')}`;
+      const doc = await ctx.http.getJson<Packument>(url);
+      ctx.cache.set('npm-packument', name, doc, 6 * 60 * 60 * 1000);
+      return doc;
+    } catch {
+      return null;
+    }
+  }
+
+  #resolveVersion(doc: Packument, requested: string): string | undefined {
+    if (requested && doc.versions?.[requested]) return requested;
+    return (
+      doc['dist-tags']?.latest ?? (doc.versions ? Object.keys(doc.versions).at(-1) : undefined)
+    );
   }
 
   async #readLockfile(projectRoot: string): Promise<NpmLockfile | null> {
@@ -300,6 +391,25 @@ function instanceScope(entry: LockPackageEntry): DependencyScope {
   if (entry.dev) return 'development';
   if (entry.optional) return 'optional';
   return 'production';
+}
+
+/** Keep only the auto-running install lifecycle scripts from a package's scripts. */
+function filterLifecycle(scripts: Record<string, string> | undefined): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [name, command] of Object.entries(scripts ?? {})) {
+    if (INSTALL_LIFECYCLE.has(name) && typeof command === 'string') result[name] = command;
+  }
+  return result;
+}
+
+function licenseString(license: LicenseField): string | undefined {
+  if (!license) return undefined;
+  return typeof license === 'string' ? license : license.type;
+}
+
+function repositoryUrl(repository: { url?: string } | string | undefined): string | undefined {
+  if (!repository) return undefined;
+  return typeof repository === 'string' ? repository : repository.url;
 }
 
 /** Direct dependency names → scope, from the manifest (preferred) or the root lock entry. */

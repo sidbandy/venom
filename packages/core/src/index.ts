@@ -50,3 +50,31 @@ export {
   severityFromScore,
 } from './vulnerabilities/index';
 export type { VulnerabilityScanResult, OsvVulnerability } from './vulnerabilities/index';
+
+// Module 3 — Malicious Package Detection (also powers the Bouncer, SPEC.md §6).
+export {
+  assessPackage,
+  scanMalicious,
+  checkCandidate,
+  detectTyposquat,
+  detectHomoglyphs,
+  assessMaintainerRisk,
+  inspectInstallScripts,
+  scanSource,
+  shannonEntropy,
+  findHighEntropyTokens,
+  levenshtein,
+  popularNamesFor,
+} from './malicious/index';
+export type {
+  BouncerVerdict,
+  PackageAssessment,
+  AssessOptions,
+  MaliciousScanResult,
+  ScanMaliciousOptions,
+  TyposquatResult,
+  HomoglyphResult,
+  MaintainerRiskSignal,
+  AstSignal,
+  AstSignalKind,
+} from './malicious/index';

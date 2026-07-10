@@ -10,8 +10,12 @@ import {
   summarizeGraph,
   scanVulnerabilities,
   summarizeVulnerabilities,
+  scanMalicious,
+  checkCandidate,
   generateSbom,
   NoSupportedLockfileError,
+  type Ecosystem,
+  type PackageAssessment,
   type SbomFormat,
 } from '@venom/core';
 
@@ -37,6 +41,7 @@ program
 
         const { vulnerabilities, findings } = await scanVulnerabilities(graph, ctx);
         const v = summarizeVulnerabilities(vulnerabilities);
+        const { assessments } = await scanMalicious(graph, ctx);
 
         console.log(
           `\nVenom audit — ${graph.root.name}${graph.root.version ? `@${graph.root.version}` : ''}`,
@@ -55,14 +60,25 @@ program
                 ')'
               : ''),
         );
+        const flagged = assessments.filter((a) => a.verdict === 'flagged').length;
+        console.log(
+          `  Package risk : ${assessments.length} of concern` +
+            (assessments.length ? ` (${flagged} flagged)` : ''),
+        );
 
-        for (const f of findings.slice(0, 20)) {
+        for (const f of findings.slice(0, 15)) {
           const mark = f.level === 'error' ? '✖' : f.level === 'warning' ? '▲' : '·';
           console.log(`\n  ${mark} ${f.title}`);
           if (f.remediation) console.log(`      ${f.remediation}`);
         }
-        if (findings.length > 20) console.log(`\n  … and ${findings.length - 20} more.`);
-        console.log('\n(Modules 3–5 land next; this reports Modules 1–2.)\n');
+        if (findings.length > 15)
+          console.log(`\n  … and ${findings.length - 15} more CVE findings.`);
+
+        for (const a of assessments.slice(0, 10)) {
+          console.log(`\n  ${verdictMark(a)} ${a.ref.name}@${a.ref.version}`);
+          for (const reason of a.reasons.slice(0, 3)) console.log(`      → ${reason}`);
+        }
+        console.log('\n(Modules 4–5 land next; this reports Modules 1–3.)\n');
       } finally {
         ctx.dispose();
       }
@@ -99,11 +115,40 @@ program
 program
   .command('check <package>')
   .description('Bouncer check: evaluate a package before installing it')
-  .action((pkg: string) => {
-    console.log(`venom check ${pkg} — not yet implemented`);
+  .option('-e, --ecosystem <ecosystem>', 'npm | pypi', 'npm')
+  .option('--no-deep', 'skip downloading and statically analyzing the package tarball')
+  .option('--offline', 'do not make any network calls', false)
+  .action(async (pkg: string, opts: { ecosystem: string; deep: boolean; offline: boolean }) => {
+    const ecosystem: Ecosystem = opts.ecosystem === 'pypi' ? 'pypi' : 'npm';
+    const ctx = createScanContext({ projectRoot: process.cwd(), offline: opts.offline });
+    try {
+      const assessment = await checkCandidate(ecosystem, pkg, ctx, { deep: opts.deep });
+      printAssessment(assessment);
+      process.exitCode = assessment.verdict === 'flagged' ? 1 : 0;
+    } finally {
+      ctx.dispose();
+    }
   });
 
 program.parseAsync();
+
+function verdictMark(a: PackageAssessment): string {
+  return a.verdict === 'flagged' ? '🚫' : a.verdict === 'caution' ? '⚠️ ' : '✅';
+}
+
+/** Render a Bouncer assessment, verdict-first, per SPEC.md §6.1. */
+function printAssessment(a: PackageAssessment): void {
+  const label =
+    a.verdict === 'flagged' ? '🚫 Flagged' : a.verdict === 'caution' ? '⚠️  Caution' : '✅ Clear';
+  const name = `${a.ref.name}${a.ref.version ? `@${a.ref.version}` : ''}`;
+  console.log(`\n${label}      ${name}`);
+  if (a.reasons.length === 0) {
+    console.log('   → No risk signals detected');
+  } else {
+    for (const reason of a.reasons) console.log(`   → ${reason}`);
+  }
+  console.log('');
+}
 
 /** Run an action against a resolved project root with consistent error handling. */
 async function withProject(

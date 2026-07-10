@@ -6,7 +6,7 @@ build. Kept separate from `SPEC.md` (the product definition) — this is the
 
 **Legend:** 🔴 high value · 🟡 medium · 🟢 nice-to-have · ✅ done
 
-_Last updated: 2026-07-09 (after Module 2 — Known Vulnerability Scanning)._
+_Last updated: 2026-07-10 (after Module 3 — Malicious Package Detection)._
 
 ---
 
@@ -47,6 +47,17 @@ _Last updated: 2026-07-09 (after Module 2 — Known Vulnerability Scanning)._
 - 🟡 **CVSS v2 and v4 numeric scoring.** We compute v3.0/3.1 base scores precisely;
   v2/v4 vectors currently fall back to the advisory's qualitative severity label.
   Add the v2 and (more involved) v4 base-score formulas for full numeric coverage.
+- 🟡 **Cross-ecosystem typosquat targets.** Typosquat checks compare a name only
+  against its own ecosystem's popular list. `reqeusts` on npm should also flag
+  against PyPI's `requests` (attackers impersonate famous names across registries).
+  Feed a merged popular-name set into the check.
+- 🟡 **Non-existent-package signal in the Bouncer.** When `venom check` finds no
+  registry metadata (404 vs. transient error, disambiguated), surface it — a name
+  that doesn't resolve is often a typo or a not-yet-published squat.
+- 🟢 **Maintainer accounts for PyPI.** The JSON API doesn't expose maintainer
+  accounts (only free-text author), so single-maintainer detection is npm-only
+  today. Use an authenticated source or the web profile to get real PyPI
+  maintainer counts.
 
 ## Ecosystem coverage (within the v1 language boundary)
 
