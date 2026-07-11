@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { Command } from 'commander';
 import {
@@ -17,6 +18,8 @@ import {
   generateSarif,
   buildUpdatePlan,
   applyNpmUpdates,
+  detectUnusedDependencies,
+  checkLicenses,
   ScoreHistoryStore,
   NoSupportedLockfileError,
   type AuditResult,
@@ -80,6 +83,12 @@ program
                 ')'
               : ''),
         );
+        const licenseIssues = result.findings.filter((f) => f.category === 'license').length;
+        if (result.unusedDependencies.length || licenseIssues) {
+          console.log(
+            `  Hygiene : ${result.unusedDependencies.length} unused dep(s), ${licenseIssues} license issue(s)`,
+          );
+        }
 
         const vulnFindings = result.findings.filter((f) => f.category === 'vulnerability');
         for (const f of vulnFindings.slice(0, 12)) {
@@ -220,6 +229,53 @@ program
   });
 
 program
+  .command('unused')
+  .description('List declared-but-unused production dependencies')
+  .argument('[dir]', 'project directory', '.')
+  .action(async (dir: string) => {
+    await withProject(dir, async (projectRoot) => {
+      const { unused } = await detectUnusedDependencies(projectRoot);
+      if (unused.length === 0) {
+        console.log('No unused production dependencies found.');
+        return;
+      }
+      console.log(`${unused.length} unused production dependencies:\n`);
+      for (const name of unused) console.log(`  · ${name}`);
+      process.exitCode = 1;
+    });
+  });
+
+program
+  .command('licenses')
+  .description('License compliance report')
+  .argument('[dir]', 'project directory', '.')
+  .action(async (dir: string) => {
+    await withProject(dir, async (projectRoot) => {
+      const graph = await inventoryProject(projectRoot);
+      const projectLicense = await readProjectLicense(projectRoot);
+      const { findings, byLicense } = await checkLicenses(
+        projectRoot,
+        graph,
+        projectLicense ? { projectLicense } : {},
+      );
+      console.log('\nLicense summary:');
+      for (const [license, count] of Object.entries(byLicense).sort((a, b) => b[1] - a[1])) {
+        console.log(`  ${String(count).padStart(4)}  ${license}`);
+      }
+      if (findings.length === 0) {
+        console.log('\nNo license conflicts or denials.');
+        return;
+      }
+      console.log(`\n${findings.length} license issue(s):`);
+      for (const f of findings) {
+        const mark = f.level === 'error' ? '✖' : f.level === 'warning' ? '▲' : '·';
+        console.log(`  ${mark} ${f.message}`);
+      }
+      process.exitCode = 1;
+    });
+  });
+
+program
   .command('secrets')
   .description('Scan the working tree and full git history for leaked credentials')
   .argument('[dir]', 'project directory', '.')
@@ -314,6 +370,17 @@ function recordScore(ctx: ScanContextHandle, result: AuditResult): ScoreRecord[]
 
 function bar(score: number): string {
   return '█'.repeat(Math.round(score / 10)).padEnd(10, '░');
+}
+
+async function readProjectLicense(projectRoot: string): Promise<string | undefined> {
+  try {
+    const pkg = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8')) as {
+      license?: unknown;
+    };
+    return typeof pkg.license === 'string' ? pkg.license : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Render a Bouncer assessment, verdict-first, per SPEC.md §6.1. */

@@ -8,7 +8,8 @@
   ],
   "scripts": {
     "build": "tsc --build",
-    "clean": "tsc --build --clean",
+    "rebuild": "tsc --build --force",
+    "clean": "tsc --build --clean && rm -rf packages/*/dist packages/*/*.tsbuildinfo",
     "typecheck": "tsc --build",
     "test": "vitest run",
     "test:watch": "vitest",

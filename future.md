@@ -6,7 +6,7 @@ build. Kept separate from `SPEC.md` (the product definition) — this is the
 
 **Legend:** 🔴 high value · 🟡 medium · 🟢 nice-to-have · ✅ done
 
-_Last updated: 2026-07-11 (after Module 5 — Reporting & Remediation)._
+_Last updated: 2026-07-11 (after Section-5 analysis features)._
 
 ---
 
@@ -108,6 +108,14 @@ would move Venom from "a good SCA tool" to something genuinely ahead of the mark
 - 🟢 **Python AST scanning (Module 3).** Extend install-script/source analysis to
   Python (`setup.py`, `sitecustomize`, `.pth`) — not just JS via `@babel/parser` —
   so PyPI packages get the same structural scrutiny as npm.
+- 🟡 **Section-5 analysis for PyPI + devDependencies.** The unused-dependency
+  detector (JS/TS imports) and license check (node_modules read) are npm-only.
+  Add Python import analysis + PyPI license metadata, and a heuristic for unused
+  devDependencies (tools invoked via config, not `import`, are false positives today).
+- 🟡 **Dependency health cards & PR dependency diff (remaining Section-5 items).**
+  Health cards (last-update, maintainer count, weekly downloads, transitive count)
+  fold naturally into `venom check` output and the VS Code hover; the before/after
+  dependency diff belongs to the CI action (compare base vs PR graphs).
 - 🟡 **CVSS v2 and v4 numeric scoring.** We compute v3.0/3.1 base scores precisely;
   v2/v4 vectors currently fall back to the advisory's qualitative severity label.
   Add the v2 and (more involved) v4 base-score formulas for full numeric coverage.

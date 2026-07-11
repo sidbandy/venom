@@ -11,6 +11,7 @@ import { scanMalicious, type PackageAssessment } from './malicious/index';
 import { scanSecrets } from './secrets/index';
 import { buildUpdatePlan } from './remediation/index';
 import { computeHealthScore } from './health/index';
+import { detectUnusedDependencies, checkLicenses, checkSecretsHygiene } from './analysis/index';
 
 export interface AuditOptions {
   /** Scan git history for secrets (in addition to the working tree). Default true. */
@@ -28,8 +29,10 @@ export interface AuditResult {
   assessments: PackageAssessment[];
   secrets: Secret[];
   updatePlan: UpdatePlanEntry[];
+  /** Declared-but-unused production dependencies (Section 5). */
+  unusedDependencies: string[];
   healthScore: HealthScore;
-  /** All findings from every module, aggregated (ready for SARIF). */
+  /** All findings from every module + Section-5 analysis, aggregated (ready for SARIF). */
   findings: Finding[];
 }
 
@@ -62,6 +65,13 @@ export async function auditProject(
   const updatePlan =
     options.updatePlan === false ? [] : await buildUpdatePlan(graph, vulnerabilities, ctx);
 
+  // Section-5 analysis (all local/offline).
+  const { unused, findings: unusedFindings } = await detectUnusedDependencies(ctx.projectRoot);
+  const { findings: licenseFindings } = await checkLicenses(ctx.projectRoot, graph, {
+    ...(ctx.config.policy?.licenseDenylist ? { denylist: ctx.config.policy.licenseDenylist } : {}),
+  });
+  const { findings: hygieneFindings } = await checkSecretsHygiene(ctx.projectRoot);
+
   const healthScore = computeHealthScore({
     summary,
     vulnerabilities,
@@ -77,7 +87,15 @@ export async function auditProject(
     assessments,
     secrets,
     updatePlan,
+    unusedDependencies: unused,
     healthScore,
-    findings: [...vulnFindings, ...malFindings, ...secretFindings],
+    findings: [
+      ...vulnFindings,
+      ...malFindings,
+      ...secretFindings,
+      ...unusedFindings,
+      ...licenseFindings,
+      ...hygieneFindings,
+    ],
   };
 }

@@ -51,6 +51,16 @@ export type { UpdatePlanOptions, AppliedUpdate } from './remediation/index';
 export { computeHealthScore, ScoreHistoryStore } from './health/index';
 export type { HealthInputs, HealthScoreOptions, ScoreRecord } from './health/index';
 
+// Section 5 — cross-cutting analysis features.
+export {
+  detectUnusedDependencies,
+  checkLicenses,
+  checkSecretsHygiene,
+  extractImports,
+  packageNameOf,
+} from './analysis/index';
+export type { UnusedResult, LicenseResult, LicenseOptions, HygieneResult } from './analysis/index';
+
 // The full audit pipeline — the single orchestration every surface calls.
 export { auditProject } from './audit';
 export type { AuditOptions, AuditResult } from './audit';
