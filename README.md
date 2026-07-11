@@ -41,6 +41,26 @@ node packages/cli/dist/index.js sbom . --format cyclonedx
 node packages/cli/dist/index.js secrets .
 ```
 
+## Use in CI
+
+Enforce policy on every PR — SARIF goes to the Security tab, a summary is posted
+as a comment, and the job fails on a `.venom.yml` violation:
+
+```yaml
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+jobs:
+  venom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sidbandy/venom/action@main
+```
+
+See [`action/`](./action/) for inputs and `venom init` to scaffold a policy.
+
 ## Architecture
 
 An npm workspaces monorepo. The engine is a standalone library; every surface is
@@ -51,6 +71,7 @@ a thin caller over it, so a detection improvement lands everywhere at once
 | --------------- | ------------------------------------------------------------- |
 | `packages/core` | `@venom/core` — the detection engine (single source of truth) |
 | `packages/cli`  | `@venom/cli` — the `venom` command-line tool                  |
+| `action/`       | Composite GitHub Action wrapping the CLI                      |
 
 Security-first internals: a single audited network egress point with a host
 allowlist and offline mode, safe download-without-execute package extraction

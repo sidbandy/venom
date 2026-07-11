@@ -1,0 +1,88 @@
+name: 'Venom Supply Chain Security'
+description: 'Audit dependencies for CVEs, malicious packages, and leaked secrets; enforce .venom.yml policy.'
+author: 'sidbandy'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  directory:
+    description: 'Project directory to scan (relative to the workspace).'
+    required: false
+    default: '.'
+  sarif-file:
+    description: 'Path to write the SARIF report to.'
+    required: false
+    default: 'venom.sarif'
+  comment:
+    description: 'Post a summary comment on pull requests.'
+    required: false
+    default: 'true'
+  upload-sarif:
+    description: 'Upload the SARIF report to the GitHub Security tab.'
+    required: false
+    default: 'true'
+  fail-on-policy:
+    description: 'Fail the job when the .venom.yml policy is violated.'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Build Venom
+      shell: bash
+      run: |
+        npm --prefix "$GITHUB_ACTION_PATH/.." ci
+        npm --prefix "$GITHUB_ACTION_PATH/.." run build
+
+    - name: Run Venom
+      id: venom
+      shell: bash
+      continue-on-error: true
+      run: |
+        node "$GITHUB_ACTION_PATH/../packages/cli/dist/index.js" ci "${{ inputs.directory }}" \
+          --sarif "${{ inputs.sarif-file }}" | tee "$RUNNER_TEMP/venom-output.txt"
+        echo "outcome=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+    - name: Upload SARIF to the Security tab
+      if: ${{ inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+
+    - name: Comment on the pull request
+      if: ${{ github.event_name == 'pull_request' && inputs.comment == 'true' }}
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          let body = 'Venom did not produce output.';
+          try {
+            body = fs.readFileSync(process.env.RUNNER_TEMP + '/venom-output.txt', 'utf8');
+          } catch {}
+          const marker = '<!-- venom-report -->';
+          const content = `${marker}\n## 🐍 Venom — Supply Chain Report\n\n\`\`\`\n${body.trim()}\n\`\`\``;
+          const { owner, repo } = context.repo;
+          const issue_number = context.issue.number;
+          const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
+          const existing = comments.find((c) => c.body && c.body.includes(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: content });
+          } else {
+            await github.rest.issues.createComment({ owner, repo, issue_number, body: content });
+          }
+
+    - name: Enforce policy result
+      if: ${{ inputs.fail-on-policy == 'true' }}
+      shell: bash
+      run: |
+        if [ "${{ steps.venom.outputs.outcome }}" != "0" ]; then
+          echo "::error::Venom policy check failed."
+          exit 1
+        fi
