@@ -15,6 +15,7 @@ import {
   scanSecrets,
   summarizeSecrets,
   generateSbom,
+  generateSarif,
   NoSupportedLockfileError,
   type Ecosystem,
   type PackageAssessment,
@@ -33,7 +34,8 @@ program
   .description('Run a full audit of the current project')
   .argument('[dir]', 'project directory', '.')
   .option('--offline', 'do not make any network calls; use cached/bundled data only', false)
-  .action(async (dir: string, opts: { offline: boolean }) => {
+  .option('--sarif <file>', 'write all findings as SARIF 2.1.0 to a file')
+  .action(async (dir: string, opts: { offline: boolean; sarif?: string }) => {
     await withProject(dir, async (projectRoot) => {
       const ctx = createScanContext({ projectRoot, offline: opts.offline });
       try {
@@ -43,8 +45,8 @@ program
 
         const { vulnerabilities, findings } = await scanVulnerabilities(graph, ctx);
         const v = summarizeVulnerabilities(vulnerabilities);
-        const { assessments } = await scanMalicious(graph, ctx);
-        const { secrets } = await scanSecrets(projectRoot, ctx);
+        const { assessments, findings: malFindings } = await scanMalicious(graph, ctx);
+        const { secrets, findings: secretFindings } = await scanSecrets(projectRoot, ctx);
         const sec = summarizeSecrets(secrets);
 
         console.log(
@@ -98,7 +100,12 @@ program
             `      ${s.preview}${s.breached ? ` (found in ${s.breachCount} breaches)` : ''}`,
           );
         }
-        console.log('\n(Module 5 lands next; this reports Modules 1–4.)\n');
+        if (opts.sarif) {
+          const all = [...findings, ...malFindings, ...secretFindings];
+          writeFileSync(resolve(opts.sarif), generateSarif(all, { toolVersion: VERSION }));
+          console.log(`\n  SARIF: wrote ${all.length} findings to ${opts.sarif}`);
+        }
+        console.log('\n(Health Score & remediation land next; this reports Modules 1–4.)\n');
       } finally {
         ctx.dispose();
       }
