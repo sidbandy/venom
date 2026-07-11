@@ -65,6 +65,11 @@ export type { UnusedResult, LicenseResult, LicenseOptions, HygieneResult } from 
 export { auditProject } from './audit';
 export type { AuditOptions, AuditResult } from './audit';
 
+// Policy as code — `.venom.yml` loading + pass/fail evaluation (SPEC.md §11).
+export { loadPolicy, STARTER_POLICY, evaluatePolicy } from './policy/index';
+export type { PolicyEvaluation } from './policy/index';
+export type { Policy } from './types/policy';
+
 // Module 2 — Known Vulnerability Scanning.
 export {
   scanVulnerabilities,

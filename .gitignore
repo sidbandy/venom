@@ -20,6 +20,10 @@ build/
 *.sqlite
 .venom-cache/
 
+# Venom CI output
+*.sarif
+venom.sarif
+
 # Editor
 .vscode/*
 !.vscode/extensions.json

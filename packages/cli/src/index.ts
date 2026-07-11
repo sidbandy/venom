@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { Command } from 'commander';
@@ -20,9 +20,13 @@ import {
   applyNpmUpdates,
   detectUnusedDependencies,
   checkLicenses,
+  loadPolicy,
+  evaluatePolicy,
+  STARTER_POLICY,
   ScoreHistoryStore,
   NoSupportedLockfileError,
   type AuditResult,
+  type Policy,
   type ScanContextHandle,
   type ScoreRecord,
   type Ecosystem,
@@ -45,7 +49,7 @@ program
   .option('--sarif <file>', 'write all findings as SARIF 2.1.0 to a file')
   .action(async (dir: string, opts: { offline: boolean; sarif?: string }) => {
     await withProject(dir, async (projectRoot) => {
-      const ctx = createScanContext({ projectRoot, offline: opts.offline });
+      const ctx = await makeContext(projectRoot, opts.offline);
       try {
         const result = await auditProject(ctx);
         recordScore(ctx, result);
@@ -320,6 +324,59 @@ program
   );
 
 program
+  .command('ci')
+  .description('CI mode: enforce .venom.yml policy, emit SARIF, exit non-zero on violations')
+  .argument('[dir]', 'project directory', '.')
+  .option('--sarif <file>', 'SARIF output path', 'venom.sarif')
+  .option('--offline', 'do not make any network calls', false)
+  .action(async (dir: string, opts: { sarif: string; offline: boolean }) => {
+    await withProject(dir, async (projectRoot) => {
+      const policy = (await loadPolicy(projectRoot)) ?? DEFAULT_CI_POLICY;
+      const ctx = createScanContext({ projectRoot, offline: opts.offline, policy });
+      try {
+        const result = await auditProject(ctx);
+        recordScore(ctx, result);
+        writeFileSync(
+          resolve(opts.sarif),
+          generateSarif(result.findings, { toolVersion: VERSION }),
+        );
+
+        const h = result.healthScore;
+        console.log(
+          `Venom CI — Health ${h.score}/100 (${h.grade}), ${result.findings.length} findings. SARIF → ${opts.sarif}`,
+        );
+        const evaluation = evaluatePolicy(result, policy);
+        for (const w of evaluation.warnings) console.log(`  ⚠️  ${w}`);
+        if (evaluation.passed) {
+          console.log('\n✅ Policy check passed.');
+        } else {
+          console.log('\n🚫 Policy violations:');
+          for (const v of evaluation.violations) console.log(`  ✖ ${v}`);
+          process.exitCode = 1;
+        }
+      } finally {
+        ctx.dispose();
+      }
+    });
+  });
+
+program
+  .command('init')
+  .description('Generate a starter .venom.yml policy file')
+  .option('--hook', 'also install a git pre-commit hook that blocks commits containing secrets')
+  .action((opts: { hook?: boolean }) => {
+    const cwd = process.cwd();
+    const policyPath = join(cwd, '.venom.yml');
+    if (existsSync(policyPath)) {
+      console.error('.venom.yml already exists — leaving it untouched.');
+    } else {
+      writeFileSync(policyPath, STARTER_POLICY);
+      console.log('Wrote .venom.yml');
+    }
+    if (opts.hook) installPreCommitHook(cwd);
+  });
+
+program
   .command('check <package>')
   .description('Bouncer check: evaluate a package before installing it')
   .option('-e, --ecosystem <ecosystem>', 'npm | pypi', 'npm')
@@ -370,6 +427,38 @@ function recordScore(ctx: ScanContextHandle, result: AuditResult): ScoreRecord[]
 
 function bar(score: number): string {
   return '█'.repeat(Math.round(score / 10)).padEnd(10, '░');
+}
+
+/** A sensible default policy for `venom ci` when the project has no .venom.yml. */
+const DEFAULT_CI_POLICY: Policy = {
+  blockOnSecrets: true,
+  blockOnKev: true,
+  maxCvssSeverity: 9.0,
+  licenseDenylist: ['AGPL-3.0'],
+};
+
+/** Build a scan context with the project's `.venom.yml` policy loaded in. */
+async function makeContext(projectRoot: string, offline: boolean): Promise<ScanContextHandle> {
+  const policy = await loadPolicy(projectRoot);
+  return createScanContext({ projectRoot, offline, ...(policy ? { policy } : {}) });
+}
+
+function installPreCommitHook(cwd: string): void {
+  if (!existsSync(join(cwd, '.git'))) {
+    console.error('Not a git repository — skipping pre-commit hook install.');
+    return;
+  }
+  const hookDir = join(cwd, '.git', 'hooks');
+  mkdirSync(hookDir, { recursive: true });
+  const script = `#!/bin/sh
+# Venom pre-commit hook — block commits that introduce secrets.
+venom secrets --no-history . || {
+  echo "Venom blocked the commit: secrets detected. Fix them, or bypass with 'git commit --no-verify'."
+  exit 1
+}
+`;
+  writeFileSync(join(hookDir, 'pre-commit'), script, { mode: 0o755 });
+  console.log('Installed .git/hooks/pre-commit');
 }
 
 async function readProjectLicense(projectRoot: string): Promise<string | undefined> {
