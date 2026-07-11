@@ -6,7 +6,59 @@ build. Kept separate from `SPEC.md` (the product definition) — this is the
 
 **Legend:** 🔴 high value · 🟡 medium · 🟢 nice-to-have · ✅ done
 
-_Last updated: 2026-07-10 (after Module 3 — Malicious Package Detection)._
+_Last updated: 2026-07-10 (after Module 4 — Secrets Detection)._
+
+---
+
+## Bigger bets — where Venom becomes category-leading
+
+Beyond finishing the spec (see the phase plan), these are the differentiators that
+would move Venom from "a good SCA tool" to something genuinely ahead of the market.
+
+- 🔴 **Reachability analysis.** Most CVEs in transitive deps are never actually
+  reachable from your code. Build a call graph and only escalate a vulnerability
+  when the vulnerable symbol is truly invoked. This is the single biggest
+  noise-reduction lever and what the leading commercial tools charge for — it
+  turns "200 findings" into "the 4 that can actually hurt you."
+- 🔴 **Version-diff threat detection ("what changed").** The real attacks
+  (event-stream, xz) are _updates_ that turn a trusted package malicious. When a
+  dependency bumps, diff the two versions: new maintainers, newly-added install
+  scripts, new network calls, new native binaries, entropy spikes. Flag the delta,
+  not the absolute state. Venom already computes all these signals per version.
+- 🔴 **Provenance & source↔artifact verification.** Verify npm provenance / Sigstore
+  attestations, and compare the published tarball against the upstream git tag —
+  the exact gap the xz backdoor exploited (malicious code in the release tarball
+  that wasn't in the repo). "This artifact does not match its source" is a killer
+  signal nobody surfaces well.
+- 🔴 **AI-assisted triage & explanation (optional, local-respecting).** An opt-in
+  layer that explains a finding in plain English ("this RCE is reachable via your
+  `parseConfig` call"), triages a wall of findings by real-world impact, and drafts
+  the remediation. Keep it strictly opt-in to preserve the zero-telemetry promise.
+- 🟡 **`venom install <pkg>` — the literal bouncer.** A package-manager wrapper that
+  runs the Bouncer check and _then_ installs (or refuses). The Section-6 CLI check
+  only helps if someone remembers to run it; wrapping the install command makes the
+  bouncer unavoidable at the true moment of intent.
+- 🟡 **Auto-remediation pull requests.** Beyond `fix --safe` dry-runs: open a PR that
+  bumps vulnerable deps, embeds the CVE/changelog context, and runs the test suite —
+  Dependabot-grade, but driven by Venom's reachability + risk model.
+- 🟡 **Behavioral sandbox (dynamic analysis).** Execute install scripts inside an
+  isolated sandbox (gVisor/Firecracker/container) and observe real syscalls and
+  network egress — dynamic confirmation on top of the static AST/entropy signals.
+- 🟡 **Live malicious-package feed.** Subscribe to the npm/PyPI malware advisory
+  feeds and known-bad-package lists so Venom catches named, in-the-wild attacks
+  instantly — not only what its heuristics infer.
+- 🟢 **Blast-radius view & health badges.** Interactive graph of which features
+  depend on a risky package (and what breaks if removed), plus a README
+  `Supply Chain Health: 91/100` badge endpoint.
+- 🟡 **API/SDK-dependency awareness.** Projects that lean on many third-party APIs
+  (Stripe, OpenAI, Twilio, AWS, …) pull in the matching client SDKs — Venom already
+  vets those packages for CVEs, malicious code, typosquats, and maintainer risk, and
+  already catches their leaked keys (`sk_live_`, OpenAI, AWS, GitHub) in code + git
+  history. Extend this into a first-class **"API surface" report**: group findings by
+  the external service each SDK talks to, flag deprecated/outdated SDK major versions,
+  detect hardcoded API base URLs pointing at look-alike/typosquatted domains, and warn
+  when an SDK performs network calls at install time. (Live endpoint uptime/health is
+  out of scope — that's runtime monitoring, a different product.)
 
 ---
 
@@ -31,6 +83,17 @@ _Last updated: 2026-07-10 (after Module 3 — Malicious Package Detection)._
 
 ## Detection & accuracy
 
+- 🟡 **Expand the secret pattern set toward 100+.** The current registry is a
+  strong ~22-pattern core; tools like gitleaks ship ~150. Add Azure, GCP service
+  accounts, Heroku, Datadog, Twilio auth tokens, Square, Shopify, JWT-with-secret,
+  and per-cloud session tokens. Also allowlist canonical documentation values
+  (e.g. AWS's `AKIAIOSFODNN7EXAMPLE`) so example code doesn't false-positive.
+- 🟡 **Fingerprint-level `.venomignore` entries.** Today `.venomignore` matches
+  file globs; add per-finding fingerprint suppression (like `.gitleaksignore`) so
+  a single reviewed false positive can be silenced without excluding a whole file.
+- 🟢 **Secret scan performance on huge histories.** `git log -p` is streamed, but
+  every added line runs the full pattern set. For very large repos, pre-filter
+  lines (cheap substring gate) before the regex battery, and/or shard by commit.
 - 🔴 **Transitive resolution for `requirements.txt`.** Currently flat/pinned-only
   (honestly excludes unpinned and carries no edges). Resolve the full graph via
   the PyPI API or an installed-environment read; also handle `-r`/`-c` includes,
