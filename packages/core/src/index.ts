@@ -78,3 +78,23 @@ export type {
   AstSignal,
   AstSignalKind,
 } from './malicious/index';
+
+// Module 4 — Secrets Detection.
+export {
+  scanSecrets,
+  summarizeSecrets,
+  scanContent,
+  scanWorkingTree,
+  scanGitHistory,
+  checkPassword,
+  redact,
+  SECRET_PATTERNS,
+} from './secrets/index';
+export type {
+  SecretsScanResult,
+  SecretsScanOptions,
+  RawSecretMatch,
+  FileSecretMatch,
+  BreachResult,
+  SecretPattern,
+} from './secrets/index';

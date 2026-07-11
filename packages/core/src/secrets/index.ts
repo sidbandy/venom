@@ -1,0 +1,13 @@
+export { scanSecrets, summarizeSecrets } from './scan';
+export type { SecretsScanResult, SecretsScanOptions } from './scan';
+export { scanContent } from './scan-content';
+export type { RawSecretMatch } from './scan-content';
+export { scanWorkingTree, scanGitHistory } from './git-scan';
+export type { FileSecretMatch } from './git-scan';
+export { checkPassword } from './hibp';
+export type { BreachResult } from './hibp';
+export { redact } from './redact';
+export { loadIgnore } from './ignore';
+export type { IgnoreMatcher } from './ignore';
+export { SECRET_PATTERNS } from './patterns';
+export type { SecretPattern } from './patterns';

@@ -12,6 +12,8 @@ import {
   summarizeVulnerabilities,
   scanMalicious,
   checkCandidate,
+  scanSecrets,
+  summarizeSecrets,
   generateSbom,
   NoSupportedLockfileError,
   type Ecosystem,
@@ -42,6 +44,8 @@ program
         const { vulnerabilities, findings } = await scanVulnerabilities(graph, ctx);
         const v = summarizeVulnerabilities(vulnerabilities);
         const { assessments } = await scanMalicious(graph, ctx);
+        const { secrets } = await scanSecrets(projectRoot, ctx);
+        const sec = summarizeSecrets(secrets);
 
         console.log(
           `\nVenom audit — ${graph.root.name}${graph.root.version ? `@${graph.root.version}` : ''}`,
@@ -65,6 +69,14 @@ program
           `  Package risk : ${assessments.length} of concern` +
             (assessments.length ? ` (${flagged} flagged)` : ''),
         );
+        console.log(
+          `  Secrets : ${sec.total}` +
+            (sec.total
+              ? ` (${sec.inWorkingTree} in tree, ${sec.inHistoryOnly} history-only` +
+                (sec.breached ? `, ${sec.breached} breached` : '') +
+                ')'
+              : ''),
+        );
 
         for (const f of findings.slice(0, 15)) {
           const mark = f.level === 'error' ? '✖' : f.level === 'warning' ? '▲' : '·';
@@ -78,7 +90,15 @@ program
           console.log(`\n  ${verdictMark(a)} ${a.ref.name}@${a.ref.version}`);
           for (const reason of a.reasons.slice(0, 3)) console.log(`      → ${reason}`);
         }
-        console.log('\n(Modules 4–5 land next; this reports Modules 1–3.)\n');
+
+        for (const s of secrets.slice(0, 10)) {
+          const loc = s.location.inHistory ? `${s.location.file} (git history)` : s.location.file;
+          console.log(`\n  🔑 ${s.description} — ${loc}`);
+          console.log(
+            `      ${s.preview}${s.breached ? ` (found in ${s.breachCount} breaches)` : ''}`,
+          );
+        }
+        console.log('\n(Module 5 lands next; this reports Modules 1–4.)\n');
       } finally {
         ctx.dispose();
       }
@@ -111,6 +131,50 @@ program
       }
     });
   });
+
+program
+  .command('secrets')
+  .description('Scan the working tree and full git history for leaked credentials')
+  .argument('[dir]', 'project directory', '.')
+  .option('--no-history', 'scan only the working tree, not git history')
+  .option('--no-breach-check', 'do not check discovered passwords against Have I Been Pwned')
+  .option('--offline', 'do not make any network calls', false)
+  .action(
+    async (dir: string, opts: { history: boolean; breachCheck: boolean; offline: boolean }) => {
+      await withProject(dir, async (projectRoot) => {
+        const ctx = createScanContext({ projectRoot, offline: opts.offline });
+        try {
+          const { secrets } = await scanSecrets(projectRoot, ctx, {
+            history: opts.history,
+            breachCheck: opts.breachCheck,
+          });
+          const sec = summarizeSecrets(secrets);
+          if (sec.total === 0) {
+            console.log('No secrets found in the working tree or git history.');
+            return;
+          }
+          console.log(
+            `Found ${sec.total} secret(s): ${sec.inWorkingTree} in the working tree, ` +
+              `${sec.inHistoryOnly} history-only` +
+              (sec.breached ? `, ${sec.breached} known-breached` : ''),
+          );
+          for (const s of secrets) {
+            const loc = s.location.inHistory
+              ? `${s.location.file}:${s.location.line ?? '?'} (history, commit ${s.location.commit?.slice(0, 8)})`
+              : `${s.location.file}:${s.location.line ?? '?'}`;
+            console.log(`\n  🔑 ${s.description}`);
+            console.log(`     ${loc}`);
+            console.log(
+              `     ${s.preview}${s.breached ? ` — found in ${s.breachCount} breaches` : ''}`,
+            );
+          }
+          process.exitCode = 1;
+        } finally {
+          ctx.dispose();
+        }
+      });
+    },
+  );
 
 program
   .command('check <package>')
