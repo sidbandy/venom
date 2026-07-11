@@ -39,6 +39,13 @@ export { generateSbom, toSpdx, toCycloneDx } from './report/sbom/index';
 export type { SbomFormat, SbomOptions, SpdxDocument, CycloneDxDocument } from './report/sbom/index';
 export { generateSarif, toSarif } from './report/sarif';
 export type { SarifLog, SarifOptions } from './report/sarif';
+export {
+  buildUpdatePlan,
+  applyNpmUpdates,
+  compareVersions,
+  classifyBump,
+} from './remediation/index';
+export type { UpdatePlanOptions, AppliedUpdate } from './remediation/index';
 
 // Module 2 — Known Vulnerability Scanning.
 export {

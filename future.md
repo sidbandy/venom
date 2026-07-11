@@ -6,7 +6,7 @@ build. Kept separate from `SPEC.md` (the product definition) — this is the
 
 **Legend:** 🔴 high value · 🟡 medium · 🟢 nice-to-have · ✅ done
 
-_Last updated: 2026-07-10 (after Module 4 — Secrets Detection)._
+_Last updated: 2026-07-11 (after Module 5 — Reporting & Remediation)._
 
 ---
 

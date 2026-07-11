@@ -16,6 +16,8 @@ import {
   summarizeSecrets,
   generateSbom,
   generateSarif,
+  buildUpdatePlan,
+  applyNpmUpdates,
   NoSupportedLockfileError,
   type Ecosystem,
   type PackageAssessment,
@@ -105,7 +107,10 @@ program
           writeFileSync(resolve(opts.sarif), generateSarif(all, { toolVersion: VERSION }));
           console.log(`\n  SARIF: wrote ${all.length} findings to ${opts.sarif}`);
         }
-        console.log('\n(Health Score & remediation land next; this reports Modules 1–4.)\n');
+        console.log(
+          '\n(Run `venom fix` for an update plan or `--sarif <file>` for CI output. ' +
+            'The composite Health Score lands next.)\n',
+        );
       } finally {
         ctx.dispose();
       }
@@ -135,6 +140,60 @@ program
         );
       } else {
         console.log(output);
+      }
+    });
+  });
+
+program
+  .command('fix')
+  .description('Plan and optionally apply dependency updates (safe / recommended / risky)')
+  .argument('[dir]', 'project directory', '.')
+  .option('--safe', 'restrict to the safe (patch-level, non-breaking) tier')
+  .option('--apply', 'write the updates to package.json (default is a dry run)')
+  .option('--offline', 'do not make any network calls', false)
+  .action(async (dir: string, opts: { safe?: boolean; apply?: boolean; offline: boolean }) => {
+    await withProject(dir, async (projectRoot) => {
+      const ctx = createScanContext({ projectRoot, offline: opts.offline });
+      try {
+        const graph = await inventoryProject(projectRoot);
+        const { vulnerabilities } = await scanVulnerabilities(graph, ctx);
+        const plan = await buildUpdatePlan(graph, vulnerabilities, ctx);
+        const shown = opts.safe ? plan.filter((e) => e.tier === 'safe') : plan;
+
+        if (shown.length === 0) {
+          console.log(
+            opts.safe ? 'No safe updates available.' : 'All direct dependencies are current.',
+          );
+          return;
+        }
+
+        for (const tier of ['safe', 'recommended', 'risky'] as const) {
+          const group = shown.filter((e) => e.tier === tier);
+          if (group.length === 0) continue;
+          console.log(`\n${tierLabel(tier)}`);
+          for (const e of group) {
+            console.log(`  ${e.current.name}  ${e.current.version} → ${e.targetVersion}`);
+            console.log(`     ${e.reason}`);
+          }
+        }
+
+        if (opts.apply) {
+          const applied = await applyNpmUpdates(
+            projectRoot,
+            opts.safe ? shown : plan.filter((e) => e.tier === 'safe'),
+          );
+          if (applied.length > 0) {
+            console.log(
+              `\nApplied ${applied.length} update(s) to package.json. Run \`npm install\` to sync.`,
+            );
+          } else {
+            console.log('\nNothing applied (only safe-tier npm updates are auto-applied).');
+          }
+        } else {
+          console.log('\n(dry run — re-run with --apply to write safe updates to package.json)');
+        }
+      } finally {
+        ctx.dispose();
       }
     });
   });
@@ -205,6 +264,14 @@ program.parseAsync();
 
 function verdictMark(a: PackageAssessment): string {
   return a.verdict === 'flagged' ? '🚫' : a.verdict === 'caution' ? '⚠️ ' : '✅';
+}
+
+function tierLabel(tier: 'safe' | 'recommended' | 'risky'): string {
+  return tier === 'safe'
+    ? '✅ Safe (patch, non-breaking)'
+    : tier === 'recommended'
+      ? '▲ Recommended (minor)'
+      : '🚫 Risky (major, likely breaking)';
 }
 
 /** Render a Bouncer assessment, verdict-first, per SPEC.md §6.1. */
