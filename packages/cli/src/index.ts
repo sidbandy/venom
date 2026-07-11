@@ -1,24 +1,27 @@
 #!/usr/bin/env node
 
 import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { Command } from 'commander';
 import {
   VERSION,
   createScanContext,
+  auditProject,
   inventoryProject,
-  summarizeGraph,
-  scanVulnerabilities,
   summarizeVulnerabilities,
-  scanMalicious,
-  checkCandidate,
-  scanSecrets,
   summarizeSecrets,
+  checkCandidate,
+  scanVulnerabilities,
+  scanSecrets,
   generateSbom,
   generateSarif,
   buildUpdatePlan,
   applyNpmUpdates,
+  ScoreHistoryStore,
   NoSupportedLockfileError,
+  type AuditResult,
+  type ScanContextHandle,
+  type ScoreRecord,
   type Ecosystem,
   type PackageAssessment,
   type SbomFormat,
@@ -41,24 +44,20 @@ program
     await withProject(dir, async (projectRoot) => {
       const ctx = createScanContext({ projectRoot, offline: opts.offline });
       try {
-        const graph = await inventoryProject(projectRoot);
-        const inv = summarizeGraph(graph);
-        const eco = inv.ecosystems.map((e) => `${e} ${inv.byEcosystem[e] ?? 0}`).join(', ');
+        const result = await auditProject(ctx);
+        recordScore(ctx, result);
 
-        const { vulnerabilities, findings } = await scanVulnerabilities(graph, ctx);
-        const v = summarizeVulnerabilities(vulnerabilities);
-        const { assessments, findings: malFindings } = await scanMalicious(graph, ctx);
-        const { secrets, findings: secretFindings } = await scanSecrets(projectRoot, ctx);
+        const { summary: inv, assessments, secrets, healthScore: h } = result;
+        const v = summarizeVulnerabilities(result.vulnerabilities);
         const sec = summarizeSecrets(secrets);
+        const eco = inv.ecosystems.map((e) => `${e} ${inv.byEcosystem[e] ?? 0}`).join(', ');
+        const rootLabel = `${result.graph.root.name}${result.graph.root.version ? `@${result.graph.root.version}` : ''}`;
 
+        console.log(`\nVenom audit — ${rootLabel}`);
+        console.log(`  Health Score : ${h.score}/100 (${h.grade})`);
         console.log(
-          `\nVenom audit — ${graph.root.name}${graph.root.version ? `@${graph.root.version}` : ''}`,
+          `  Dependencies : ${inv.total} (${inv.direct} direct, ${inv.transitive} transitive) · ${eco} · max depth ${inv.maxDepth}`,
         );
-        console.log(
-          `  Dependencies : ${inv.total} (${inv.direct} direct, ${inv.transitive} transitive)`,
-        );
-        console.log(`  Ecosystems   : ${eco}`);
-        console.log(`  Max depth    : ${inv.maxDepth}`);
         console.log(
           `  Vulnerabilities : ${v.total}` +
             (v.total
@@ -82,35 +81,57 @@ program
               : ''),
         );
 
-        for (const f of findings.slice(0, 15)) {
+        const vulnFindings = result.findings.filter((f) => f.category === 'vulnerability');
+        for (const f of vulnFindings.slice(0, 12)) {
           const mark = f.level === 'error' ? '✖' : f.level === 'warning' ? '▲' : '·';
           console.log(`\n  ${mark} ${f.title}`);
           if (f.remediation) console.log(`      ${f.remediation}`);
         }
-        if (findings.length > 15)
-          console.log(`\n  … and ${findings.length - 15} more CVE findings.`);
-
-        for (const a of assessments.slice(0, 10)) {
+        for (const a of assessments.slice(0, 8)) {
           console.log(`\n  ${verdictMark(a)} ${a.ref.name}@${a.ref.version}`);
           for (const reason of a.reasons.slice(0, 3)) console.log(`      → ${reason}`);
         }
-
-        for (const s of secrets.slice(0, 10)) {
+        for (const s of secrets.slice(0, 8)) {
           const loc = s.location.inHistory ? `${s.location.file} (git history)` : s.location.file;
           console.log(`\n  🔑 ${s.description} — ${loc}`);
+        }
+
+        if (opts.sarif) {
+          writeFileSync(
+            resolve(opts.sarif),
+            generateSarif(result.findings, { toolVersion: VERSION }),
+          );
+          console.log(`\n  SARIF: wrote ${result.findings.length} findings to ${opts.sarif}`);
+        }
+        console.log('\n(Run `venom fix` for an update plan or `venom score` for the trend.)\n');
+      } finally {
+        ctx.dispose();
+      }
+    });
+  });
+
+program
+  .command('score')
+  .description('Print the supply-chain health score, its breakdown, and trend')
+  .argument('[dir]', 'project directory', '.')
+  .option('--offline', 'do not make any network calls', false)
+  .action(async (dir: string, opts: { offline: boolean }) => {
+    await withProject(dir, async (projectRoot) => {
+      const ctx = createScanContext({ projectRoot, offline: opts.offline });
+      try {
+        const result = await auditProject(ctx);
+        const trend = recordScore(ctx, result);
+        const h = result.healthScore;
+        console.log(`\nSupply Chain Health: ${h.score}/100 (grade ${h.grade})\n`);
+        for (const c of h.components) {
           console.log(
-            `      ${s.preview}${s.breached ? ` (found in ${s.breachCount} breaches)` : ''}`,
+            `  ${bar(c.score)} ${c.label.padEnd(30)} ${String(c.score).padStart(3)}/100  ${c.summary}`,
           );
         }
-        if (opts.sarif) {
-          const all = [...findings, ...malFindings, ...secretFindings];
-          writeFileSync(resolve(opts.sarif), generateSarif(all, { toolVersion: VERSION }));
-          console.log(`\n  SARIF: wrote ${all.length} findings to ${opts.sarif}`);
+        if (trend.length > 1) {
+          console.log(`\n  Trend: ${trend.map((r) => r.score).join(' → ')}`);
         }
-        console.log(
-          '\n(Run `venom fix` for an update plan or `--sarif <file>` for CI output. ' +
-            'The composite Health Score lands next.)\n',
-        );
+        console.log('');
       } finally {
         ctx.dispose();
       }
@@ -272,6 +293,27 @@ function tierLabel(tier: 'safe' | 'recommended' | 'risky'): string {
     : tier === 'recommended'
       ? '▲ Recommended (minor)'
       : '🚫 Risky (major, likely breaking)';
+}
+
+/** Persist this run's score to local history and return the recent trend (oldest→newest). */
+function recordScore(ctx: ScanContextHandle, result: AuditResult): ScoreRecord[] {
+  const store = new ScoreHistoryStore(join(ctx.config.dataDir, 'history.db'));
+  try {
+    store.record({
+      timestamp: result.healthScore.computedAt,
+      score: result.healthScore.score,
+      grade: result.healthScore.grade,
+      cveCount: result.vulnerabilities.length,
+      secretCount: result.secrets.length,
+    });
+    return store.recent(10).reverse();
+  } finally {
+    store.close();
+  }
+}
+
+function bar(score: number): string {
+  return '█'.repeat(Math.round(score / 10)).padEnd(10, '░');
 }
 
 /** Render a Bouncer assessment, verdict-first, per SPEC.md §6.1. */

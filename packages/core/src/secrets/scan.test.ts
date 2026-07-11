@@ -55,8 +55,9 @@ describe('scanSecrets (working tree + git history)', () => {
   it('finds a live secret in the tree and a removed one still in history', async () => {
     const dir = await initRepo();
 
-    // A secret that stays in the working tree.
-    await writeFile(join(dir, 'app.js'), 'const key = "AKIAIOSFODNN7EXAMPLE";\n');
+    // A secret that stays in the working tree (non-canonical, assembled from parts).
+    const awsKey = `AKIA${'ROSFODNN7TESTKEY'}`;
+    await writeFile(join(dir, 'app.js'), `const key = "${awsKey}";\n`);
     await git(dir, 'add', 'app.js');
     await git(dir, 'commit', '-m', 'add app');
 
@@ -83,7 +84,7 @@ describe('scanSecrets (working tree + git history)', () => {
 
     // Redaction: the raw token must never appear in a finding.
     for (const f of findings) {
-      expect(f.message).not.toContain('AKIAIOSFODNN7EXAMPLE');
+      expect(f.message).not.toContain(awsKey);
       expect(f.level).toBe('error');
     }
 

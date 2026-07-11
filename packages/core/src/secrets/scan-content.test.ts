@@ -4,14 +4,18 @@ import { scanContent } from './scan-content';
 // Fixture tokens are assembled from parts so this source file itself contains no
 // literal secret (keeps GitHub push-protection and Venom's own scan clean); the
 // runtime values are still the full, detectable tokens.
+// Non-canonical, assembled-from-parts fixtures: still match the detectors, but are
+// neither on the example allowlist nor a literal secret in this committed file.
+const AWS_KEY = `AKIA${'ROSFODNN7TESTKEY'}`;
+const AWS_SECRET = `${'aB3dE6gH9jK2mN5pQ8rS'}${'1tU4vW7xY0zA1bC2dE3f'}`;
 const GH_PAT = `ghp_${'1234567890abcdefghijklmnopqrstuvwxyz'}`;
 const STRIPE_KEY = `sk_live_${'abcdefghijklmnopqrstuvwx'}`;
 
 describe('scanContent', () => {
   it('detects a variety of credential types with redacted previews', () => {
     const text = [
-      'const awsKey = "AKIAIOSFODNN7EXAMPLE";',
-      'aws_secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"',
+      `const awsKey = "${AWS_KEY}";`,
+      `aws_secret_access_key = "${AWS_SECRET}"`,
       `GITHUB_TOKEN=${GH_PAT}`,
       `stripe = "${STRIPE_KEY}"`,
       'const db = "postgres://admin:sup3rs3cret@db.example.com:5432/app";',
@@ -46,6 +50,11 @@ describe('scanContent', () => {
   it('ignores low-entropy placeholders', () => {
     expect(scanContent('password = "changeme"')).toHaveLength(0);
     expect(scanContent('api_key = "your-api-key-here"')).toHaveLength(0);
+  });
+
+  it('ignores canonical documentation/example credentials', () => {
+    // AWS's own documented example key appears in countless docs/tutorials.
+    expect(scanContent('const k = "AKIAIOSFODNN7EXAMPLE";')).toHaveLength(0);
   });
 
   it('skips binary content', () => {

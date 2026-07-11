@@ -47,6 +47,14 @@ export {
 } from './remediation/index';
 export type { UpdatePlanOptions, AppliedUpdate } from './remediation/index';
 
+// Phase 6 — composite Health Score + local history.
+export { computeHealthScore, ScoreHistoryStore } from './health/index';
+export type { HealthInputs, HealthScoreOptions, ScoreRecord } from './health/index';
+
+// The full audit pipeline — the single orchestration every surface calls.
+export { auditProject } from './audit';
+export type { AuditOptions, AuditResult } from './audit';
+
 // Module 2 — Known Vulnerability Scanning.
 export {
   scanVulnerabilities,

@@ -86,8 +86,9 @@ would move Venom from "a good SCA tool" to something genuinely ahead of the mark
 - 🟡 **Expand the secret pattern set toward 100+.** The current registry is a
   strong ~22-pattern core; tools like gitleaks ship ~150. Add Azure, GCP service
   accounts, Heroku, Datadog, Twilio auth tokens, Square, Shopify, JWT-with-secret,
-  and per-cloud session tokens. Also allowlist canonical documentation values
-  (e.g. AWS's `AKIAIOSFODNN7EXAMPLE`) so example code doesn't false-positive.
+  and per-cloud session tokens. (✅ Canonical documentation values like AWS's
+  `AKIAIOSFODNN7EXAMPLE` are already allowlisted so example code doesn't
+  false-positive; the allowlist can be extended alongside the pattern set.)
 - 🟡 **Fingerprint-level `.venomignore` entries.** Today `.venomignore` matches
   file globs; add per-finding fingerprint suppression (like `.gitleaksignore`) so
   a single reviewed false positive can be silenced without excluding a whole file.

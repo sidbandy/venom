@@ -23,6 +23,16 @@ export interface ScanContentOptions {
 
 const NUL = String.fromCharCode(0);
 
+// Canonical documentation/dummy credentials that appear verbatim in vendor docs,
+// tutorials, and READMEs. They are not real secrets and must never be flagged
+// (AWS's own example key, notably, shows up everywhere).
+const EXAMPLE_ALLOWLIST = new Set([
+  'AKIAIOSFODNN7EXAMPLE',
+  'AKIAI44QH8DHBEXAMPLE',
+  'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+  'je7MtGbClwBF/2Zp9Utk/h3yCo8nvbEXAMPLEKEY',
+]);
+
 // Common placeholder/dummy values. Entropy alone can't filter dictionary-word
 // placeholders (they have moderate entropy), so generic password/secret matches
 // are additionally checked against this list. Structured tokens (AWS, GitHub, …)
@@ -53,7 +63,7 @@ export function scanContent(text: string, options: ScanContentOptions = {}): Raw
   for (const pattern of SECRET_PATTERNS) {
     for (const match of text.matchAll(pattern.regex)) {
       const value = match[1] ?? match[0];
-      if (!value) continue;
+      if (!value || EXAMPLE_ALLOWLIST.has(value)) continue;
       const entropy = shannonEntropy(value);
       if (pattern.minEntropy !== undefined && entropy < pattern.minEntropy) continue;
       // Filter obvious placeholders on the loosely-structured generic patterns only.
