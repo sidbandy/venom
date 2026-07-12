@@ -78,11 +78,12 @@ An npm workspaces monorepo. The engine is a standalone library; every surface is
 a thin caller over it, so a detection improvement lands everywhere at once
 (SPEC.md §3.3, §9.1).
 
-| Package         | Role                                                          |
-| --------------- | ------------------------------------------------------------- |
-| `packages/core` | `@venom/core` — the detection engine (single source of truth) |
-| `packages/cli`  | `@venom/cli` — the `venom` command-line tool                  |
-| `action/`       | Composite GitHub Action wrapping the CLI                      |
+| Package           | Role                                                          |
+| ----------------- | ------------------------------------------------------------- |
+| `packages/core`   | `@venom/core` — the detection engine (single source of truth) |
+| `packages/cli`    | `@venom/cli` — the `venom` command-line tool                  |
+| `packages/vscode` | VS Code extension — the always-on in-editor surface           |
+| `action/`         | Composite GitHub Action wrapping the CLI                      |
 
 Security-first internals: a single audited network egress point with a host
 allowlist and offline mode, safe download-without-execute package extraction

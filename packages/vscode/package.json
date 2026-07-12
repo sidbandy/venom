@@ -1,0 +1,51 @@
+{
+  "name": "venom-vscode",
+  "displayName": "Venom — Supply Chain Security",
+  "description": "Inline supply-chain security in your editor: health score, the Bouncer on package.json, and pre-install checks — over the same @venom/core engine as the CLI.",
+  "version": "0.1.0",
+  "license": "ISC",
+  "publisher": "sidbandy",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "venom.audit",
+        "title": "Venom: Audit Workspace"
+      },
+      {
+        "command": "venom.check",
+        "title": "Venom: Check Package Before Install"
+      }
+    ],
+    "configuration": {
+      "title": "Venom",
+      "properties": {
+        "venom.offline": {
+          "type": "boolean",
+          "default": false,
+          "description": "Never make network calls; use cached/bundled data only."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "dependencies": {
+    "@venom/core": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0"
+  }
+}
