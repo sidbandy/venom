@@ -24,6 +24,14 @@ CLI and CI surfaces are built and tested:
 | **Secrets**                   | ~22 credential patterns across the working tree **and full git history**, redacted, with **HIBP k-anonymity** breach checks (only a 5-char hash prefix ever leaves the machine).                   |
 | **Health & policy**           | A composite **0–100 Health Score** with trend history, unused-dependency + license checks, SARIF output, and `.venom.yml` **policy-as-code** gating in CI.                                         |
 
+Beyond the spec, Venom also does what the leading commercial tools charge for:
+**reachability analysis** (CVEs in packages your code can't actually reach are
+de-prioritized and weighted less), **version-diff threat detection**
+(`venom diff` flags the event-stream/xz _update_ pattern — new maintainers,
+install scripts, or dangerous code capabilities between two versions), a literal
+**`venom install`** bouncer that vets then installs (or refuses), and **npm +
+pnpm + Yarn** lockfile support.
+
 ## Try it
 
 ```bash
@@ -32,9 +40,12 @@ npm install && npm run build
 # Full audit of a project (inventory + CVEs + package risk + secrets)
 node packages/cli/dist/index.js audit /path/to/project
 
-# Bouncer: vet a package before you install it
+# Bouncer: vet a package before you install it (or vet-then-install)
 node packages/cli/dist/index.js check expres          # 🚫 flags a typosquat of "express"
-node packages/cli/dist/index.js check flask -e pypi   # ✅ clear
+node packages/cli/dist/index.js install lodash        # vets, then runs npm install
+
+# Version-diff: did this update turn malicious? (event-stream / xz pattern)
+node packages/cli/dist/index.js diff lodash 4.17.20 4.17.21
 
 # Health score with component breakdown + trend
 node packages/cli/dist/index.js score .

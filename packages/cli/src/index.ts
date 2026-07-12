@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -420,6 +421,44 @@ program
   );
 
 program
+  .command('install <package>')
+  .alias('i')
+  .description('Bouncer-guarded install: vet a package, then install it (or refuse)')
+  .option('-e, --ecosystem <ecosystem>', 'npm | pypi', 'npm')
+  .option('--force', 'install even if the package is flagged')
+  .option('--dry-run', 'run the check only; do not install')
+  .action(async (pkg: string, opts: { ecosystem: string; force?: boolean; dryRun?: boolean }) => {
+    const ecosystem: Ecosystem = opts.ecosystem === 'pypi' ? 'pypi' : 'npm';
+    const ctx = createScanContext({ projectRoot: process.cwd(), offline: false });
+    let verdict;
+    try {
+      const assessment = await checkCandidate(ecosystem, pkg, ctx, { deep: false });
+      printAssessment(assessment);
+      verdict = assessment.verdict;
+    } finally {
+      ctx.dispose();
+    }
+
+    if (opts.dryRun) {
+      console.log(
+        verdict === 'flagged' ? '(dry run — would be BLOCKED)' : '(dry run — would install)',
+      );
+      process.exitCode = verdict === 'flagged' ? 1 : 0;
+      return;
+    }
+    if (verdict === 'flagged' && !opts.force) {
+      console.error('🚫 Venom blocked this install. Re-run with --force to override.');
+      process.exitCode = 1;
+      return;
+    }
+
+    const [cmd, args] =
+      ecosystem === 'pypi' ? ['pip', ['install', pkg]] : ['npm', ['install', pkg]];
+    console.log(`Installing ${pkg}…\n`);
+    process.exitCode = await runCommand(cmd, args);
+  });
+
+program
   .command('check <package>')
   .description('Bouncer check: evaluate a package before installing it')
   .option('-e, --ecosystem <ecosystem>', 'npm | pypi', 'npm')
@@ -470,6 +509,15 @@ function recordScore(ctx: ScanContextHandle, result: AuditResult): ScoreRecord[]
 
 function bar(score: number): string {
   return '█'.repeat(Math.round(score / 10)).padEnd(10, '░');
+}
+
+/** Spawn a command, inheriting stdio, and resolve with its exit code. */
+function runCommand(cmd: string, args: string[]): Promise<number> {
+  return new Promise((resolvePromise) => {
+    const child = spawn(cmd, args, { stdio: 'inherit', shell: false });
+    child.on('error', () => resolvePromise(1));
+    child.on('close', (code) => resolvePromise(code ?? 0));
+  });
 }
 
 /** A sensible default policy for `venom ci` when the project has no .venom.yml. */
