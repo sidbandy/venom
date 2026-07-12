@@ -99,6 +99,7 @@ export {
   findHighEntropyTokens,
   levenshtein,
   popularNamesFor,
+  diffVersions,
 } from './malicious/index';
 export type {
   BouncerVerdict,
@@ -111,6 +112,8 @@ export type {
   MaintainerRiskSignal,
   AstSignal,
   AstSignalKind,
+  VersionDiff,
+  DiffVerdict,
 } from './malicious/index';
 
 // Module 4 — Secrets Detection.

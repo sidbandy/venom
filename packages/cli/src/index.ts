@@ -12,6 +12,7 @@ import {
   summarizeVulnerabilities,
   summarizeSecrets,
   checkCandidate,
+  diffVersions,
   scanVulnerabilities,
   scanSecrets,
   generateSbom,
@@ -379,6 +380,44 @@ program
     }
     if (opts.hook) installPreCommitHook(cwd);
   });
+
+program
+  .command('diff <package> <from> <to>')
+  .description(
+    'Compare two versions of a package for suspicious changes (new maintainers, install scripts, dangerous code)',
+  )
+  .option('-e, --ecosystem <ecosystem>', 'npm | pypi', 'npm')
+  .option('--offline', 'do not make any network calls', false)
+  .action(
+    async (
+      pkg: string,
+      from: string,
+      to: string,
+      opts: { ecosystem: string; offline: boolean },
+    ) => {
+      const ecosystem: Ecosystem = opts.ecosystem === 'pypi' ? 'pypi' : 'npm';
+      const ctx = createScanContext({ projectRoot: process.cwd(), offline: opts.offline });
+      try {
+        const d = await diffVersions(ecosystem, pkg, from, to, ctx);
+        const label =
+          d.verdict === 'flagged'
+            ? '🚫 Flagged'
+            : d.verdict === 'caution'
+              ? '⚠️  Caution'
+              : '✅ Clear';
+        console.log(`\n${label}      ${d.package}  ${d.from} → ${d.to}`);
+        if (d.reasons.length === 0) {
+          console.log('   → No security-relevant changes detected');
+        } else {
+          for (const reason of d.reasons) console.log(`   → ${reason}`);
+        }
+        console.log('');
+        process.exitCode = d.verdict === 'flagged' ? 1 : 0;
+      } finally {
+        ctx.dispose();
+      }
+    },
+  );
 
 program
   .command('check <package>')

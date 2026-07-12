@@ -21,11 +21,13 @@ would move Venom from "a good SCA tool" to something genuinely ahead of the mark
   the audit and weighted less in the Health Score. **Next refinement:** symbol-level
   (call-graph) reachability — escalate only when the vulnerable _function_ is
   invoked, the further noise-reduction lever the leading commercial tools charge for.
-- 🔴 **Version-diff threat detection ("what changed").** The real attacks
-  (event-stream, xz) are _updates_ that turn a trusted package malicious. When a
-  dependency bumps, diff the two versions: new maintainers, newly-added install
-  scripts, new network calls, new native binaries, entropy spikes. Flag the delta,
-  not the absolute state. Venom already computes all these signals per version.
+- ✅ **Version-diff threat detection ("what changed").** Implemented as
+  `venom diff <pkg> <from> <to>` / `diffVersions`: downloads both versions
+  (without executing), and flags the security-relevant delta — new maintainers
+  (ownership handoff), newly-added/changed install scripts, newly-introduced code
+  capabilities (child_process, eval, network, obfuscation), and entropy spikes.
+  This catches the event-stream/xz _update_ pattern. **Next:** run it automatically
+  in CI on every dependency bump (diff base vs PR lockfile).
 - 🔴 **Provenance & source↔artifact verification.** Verify npm provenance / Sigstore
   attestations, and compare the published tarball against the upstream git tag —
   the exact gap the xz backdoor exploited (malicious code in the release tarball

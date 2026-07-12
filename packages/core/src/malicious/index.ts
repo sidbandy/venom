@@ -6,6 +6,8 @@ export type {
   MaliciousScanResult,
   ScanMaliciousOptions,
 } from './assess';
+export { diffVersions } from './version-diff';
+export type { VersionDiff, DiffVerdict } from './version-diff';
 export { detectTyposquat } from './typosquat';
 export type { TyposquatResult } from './typosquat';
 export { detectHomoglyphs } from './homoglyph';
