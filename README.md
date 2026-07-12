@@ -5,7 +5,7 @@
 Venom answers one question: _can I trust every piece of code my project depends on?_
 It stops risky packages **before** they're installed, continuously tracks the
 health of everything already in your tree, and enforces policy in CI — all through
-one detection engine surfaced as a CLI and a GitHub Action (VS Code plugin next).
+one detection engine surfaced as a CLI, a VS Code plugin, and a GitHub Action.
 Fully local, zero telemetry: the only network calls are anonymous public lookups
 (OSV, the package registries, and HIBP via k-anonymity).
 
@@ -101,7 +101,8 @@ npm run format        # prettier
 
 ## Status
 
-🚧 Active development. The engine (Modules 1–5), Health Score + history, the full
-CLI (`audit`, `check`, `fix`, `sbom`, `score`, `unused`, `licenses`, `secrets`,
-`ci`, `init`), and the GitHub Action are complete and tested. Next: the VS Code
-plugin and curated demo repos. Not yet published to npm.
+The full V1 scope is built and tested: the engine (Modules 1–5), the composite
+Health Score + history, all three surfaces (CLI, VS Code extension, GitHub
+Action), policy-as-code, and the four curated [demo repos](./demo/). Not yet
+published to npm/the Marketplace — see [`future.md`](./future.md) for what's next
+(reachability analysis, version-diff threat detection, provenance verification).

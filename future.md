@@ -6,7 +6,7 @@ build. Kept separate from `SPEC.md` (the product definition) — this is the
 
 **Legend:** 🔴 high value · 🟡 medium · 🟢 nice-to-have · ✅ done
 
-_Last updated: 2026-07-11 (after policy-as-code: `venom ci` / `init` + full CLI)._
+_Last updated: 2026-07-12 (V1 spec complete: all 3 surfaces + demo repos)._
 
 ---
 

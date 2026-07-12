@@ -4,7 +4,8 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/*.d.ts'],
+    // demo/ holds intentional fixture projects (CommonJS sample apps), not product code.
+    ignores: ['**/dist/**', '**/node_modules/**', '**/*.d.ts', 'demo/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

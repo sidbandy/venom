@@ -1,0 +1,10 @@
+{
+  "name": "demo-unhealthy",
+  "version": "1.0.0",
+  "description": "Looks fine, but declares dependencies it never imports — dead weight and attack surface with zero benefit.",
+  "dependencies": {
+    "left-pad": "1.3.0",
+    "is-thirteen": "2.0.0",
+    "cool-ascii-faces": "1.3.4"
+  }
+}

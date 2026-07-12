@@ -1,0 +1,8 @@
+{
+  "name": "demo-typosquat",
+  "version": "1.0.0",
+  "description": "Manifest with a typosquatting-style package name planted in it.",
+  "dependencies": {
+    "expres": "1.0.0"
+  }
+}

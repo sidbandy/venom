@@ -1,0 +1,9 @@
+{
+  "name": "demo-outdated-cves",
+  "version": "1.0.0",
+  "description": "Pinned to old versions that carry real, documented CVEs.",
+  "dependencies": {
+    "lodash": "4.17.15",
+    "minimist": "1.2.0"
+  }
+}
