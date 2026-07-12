@@ -8,6 +8,7 @@ import type { EcosystemAdapter, EcosystemParseResult } from '../types/adapter';
 import type { FetchedTarball, RegistryMetadata } from '../types/registry';
 import { extractTarball } from '../extract/tarball';
 import { popularNamesFor } from '../malicious/popular-names';
+import { assignDepth, finalizeNodes, type WorkingNode } from './working-graph';
 import { normalizePypiName, toPurl } from './purl';
 
 interface PypiFile {
@@ -28,15 +29,6 @@ interface PypiProject {
     project_urls?: Record<string, string>;
   };
   releases?: Record<string, PypiFile[]>;
-}
-
-interface WorkingNode {
-  ref: PackageRef;
-  direct: boolean;
-  depth: number;
-  scopes: Set<DependencyScope>;
-  dependencies: Set<string>;
-  parents: Set<string>;
 }
 
 interface PoetryPackage {
@@ -362,36 +354,4 @@ function parseRequirementLine(raw: string): ParsedRequirement | null {
 function parseRequirementName(spec: string): string | null {
   const match = /^([A-Za-z0-9._-]+)/.exec(spec.trim());
   return match ? normalizePypiName(match[1]!) : null;
-}
-
-function assignDepth(working: Map<string, WorkingNode>, seeds: string[]): void {
-  const queue = [...seeds];
-  let head = 0;
-  while (head < queue.length) {
-    const node = working.get(queue[head++]!);
-    if (!node) continue;
-    for (const childKey of node.dependencies) {
-      const child = working.get(childKey);
-      if (child && child.depth > node.depth + 1) {
-        child.depth = node.depth + 1;
-        queue.push(childKey);
-      }
-    }
-  }
-  for (const node of working.values()) {
-    if (!Number.isFinite(node.depth)) node.depth = node.direct ? 1 : 2;
-  }
-}
-
-function finalizeNodes(working: Map<string, WorkingNode>): DependencyNode[] {
-  return [...working.values()]
-    .map((n) => ({
-      ref: n.ref,
-      direct: n.direct,
-      depth: n.depth,
-      scopes: [...n.scopes].sort(),
-      dependencies: [...n.dependencies].sort(),
-      parents: [...n.parents].sort(),
-    }))
-    .sort((a, b) => packageKey(a.ref).localeCompare(packageKey(b.ref)));
 }

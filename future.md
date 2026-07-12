@@ -136,10 +136,10 @@ would move Venom from "a good SCA tool" to something genuinely ahead of the mark
 
 ## Ecosystem coverage (within the v1 language boundary)
 
-- 🔴 **pnpm (`pnpm-lock.yaml`) and Yarn (`yarn.lock` classic + berry).** These are
-  the same npm ecosystem (no new trust boundary vs. SPEC §14) and are common in
-  real repos. Each is a new `EcosystemAdapter`-style lockfile parser feeding the
-  existing npm graph — high real-world payoff, low architectural cost.
+- ✅ **pnpm (`pnpm-lock.yaml` v6/v9) and Yarn Classic (`yarn.lock` v1).**
+  Implemented as lockfile parsers feeding the existing npm graph (a shared
+  `working-graph` helper backs all four npm/pnpm/yarn/pypi parsers). **Next:**
+  Yarn Berry (`yarn.lock` v2+, which is YAML) — a small addition on top.
 - 🟡 **More PyPI manifests:** `Pipfile.lock`, `uv.lock`, PDM's `pdm.lock`, and
   PEP 621 `[project]` metadata. All slot behind the existing `PypiAdapter`.
 

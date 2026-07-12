@@ -10,16 +10,9 @@ import { extractTarball } from '../extract/tarball';
 import { INSTALL_LIFECYCLE } from '../malicious/install-scripts';
 import { popularNamesFor } from '../malicious/popular-names';
 import { toPurl } from './purl';
-
-/** A mutable node used while resolving; converted to a {@link DependencyNode} at the end. */
-interface WorkingNode {
-  ref: PackageRef;
-  direct: boolean;
-  depth: number;
-  scopes: Set<DependencyScope>;
-  dependencies: Set<string>;
-  parents: Set<string>;
-}
+import { parsePnpmLock } from './pnpm-lock';
+import { parseYarnLock } from './yarn-lock';
+import { assignDepth, finalizeNodes, type WorkingNode } from './working-graph';
 
 /** Shape of a package entry in a lockfileVersion 2/3 `packages` map. */
 interface LockPackageEntry {
@@ -84,32 +77,52 @@ interface Packument {
 const NODE_MODULES = 'node_modules/';
 
 /**
- * npm ecosystem adapter (SPEC.md §4 M1). Parses `package-lock.json` /
- * `npm-shrinkwrap.json` into a fully-resolved set of dependency nodes with
- * accurate parent/child edges and shortest-path depth. Supports the modern
- * `packages` map (lockfileVersion 2 & 3, npm 7+) precisely, with a best-effort
- * path for the legacy nested `dependencies` tree (lockfileVersion 1).
+ * npm ecosystem adapter (SPEC.md §4 M1). Parses the ecosystem's lockfiles into a
+ * fully-resolved set of dependency nodes with accurate parent/child edges and
+ * shortest-path depth: `package-lock.json` / `npm-shrinkwrap.json` (lockfileVersion
+ * 1/2/3), `pnpm-lock.yaml` (v6/v9), and Yarn Classic `yarn.lock`.
  */
 export class NpmAdapter implements EcosystemAdapter {
   readonly ecosystem = 'npm' as const;
 
   async parseProject(projectRoot: string): Promise<EcosystemParseResult | null> {
-    const lock = await this.#readLockfile(projectRoot);
-    if (!lock) return null;
-
     const pkgJson = await this.#readJson<PackageJson>(join(projectRoot, 'package.json'));
-    const root: ProjectRoot = {
-      name: pkgJson?.name ?? lock.name ?? basename(projectRoot),
-      ...((pkgJson?.version ?? lock.version) ? { version: pkgJson?.version ?? lock.version } : {}),
+
+    // npm — package-lock.json / npm-shrinkwrap.json
+    const lock = await this.#readLockfile(projectRoot);
+    if (lock) {
+      const root = this.#root(projectRoot, pkgJson, lock);
+      const usePackagesMap = lock.packages && Object.keys(lock.packages).length > 0;
+      const nodes = usePackagesMap
+        ? this.#parsePackagesMap(lock.packages as Record<string, LockPackageEntry>, pkgJson)
+        : this.#parseLegacyTree(lock, pkgJson);
+      return { root, nodes };
+    }
+
+    // pnpm
+    const pnpm = await this.#readText(join(projectRoot, 'pnpm-lock.yaml'));
+    if (pnpm) {
+      const root = this.#root(projectRoot, pkgJson, null);
+      return { root, nodes: parsePnpmLock(pnpm, root) };
+    }
+
+    // Yarn
+    const yarn = await this.#readText(join(projectRoot, 'yarn.lock'));
+    if (yarn) {
+      const root = this.#root(projectRoot, pkgJson, null);
+      return { root, nodes: parseYarnLock(yarn, root, pkgJson) };
+    }
+
+    return null;
+  }
+
+  #root(projectRoot: string, pkgJson: PackageJson | null, lock: NpmLockfile | null): ProjectRoot {
+    const version = pkgJson?.version ?? lock?.version;
+    return {
+      name: pkgJson?.name ?? lock?.name ?? basename(projectRoot),
+      ...(version ? { version } : {}),
       path: projectRoot,
     };
-
-    const usePackagesMap = lock.packages && Object.keys(lock.packages).length > 0;
-    const nodes = usePackagesMap
-      ? this.#parsePackagesMap(lock.packages as Record<string, LockPackageEntry>, pkgJson)
-      : this.#parseLegacyTree(lock, pkgJson);
-
-    return { root, nodes };
   }
 
   purl(ref: PackageRef): string {
@@ -207,6 +220,14 @@ export class NpmAdapter implements EcosystemAdapter {
   async #readJson<T>(path: string): Promise<T | null> {
     try {
       return JSON.parse(await readFile(path, 'utf8')) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  async #readText(path: string): Promise<string | null> {
+    try {
+      return await readFile(path, 'utf8');
     } catch {
       return null;
     }
@@ -425,41 +446,4 @@ function directDependencyScopes(
   for (const name of Object.keys(source.optionalDependencies ?? {})) result.set(name, 'optional');
   for (const name of Object.keys(source.dependencies ?? {})) result.set(name, 'production');
   return result;
-}
-
-/** Shortest-path depth from the direct dependencies (BFS over prod/optional edges). */
-function assignDepth(working: Map<string, WorkingNode>, seeds: string[]): void {
-  const queue: string[] = [...seeds];
-  let head = 0;
-  while (head < queue.length) {
-    const key = queue[head++]!;
-    const node = working.get(key);
-    if (!node) continue;
-    for (const childKey of node.dependencies) {
-      const child = working.get(childKey);
-      if (!child) continue;
-      if (child.depth > node.depth + 1) {
-        child.depth = node.depth + 1;
-        queue.push(childKey);
-      }
-    }
-  }
-  // Any node never reached (e.g. an orphaned optional install) gets a best-effort depth.
-  for (const node of working.values()) {
-    if (!Number.isFinite(node.depth)) node.depth = node.direct ? 1 : 2;
-  }
-}
-
-/** Freeze working nodes into immutable DependencyNodes with deterministic ordering. */
-function finalizeNodes(working: Map<string, WorkingNode>): DependencyNode[] {
-  return [...working.values()]
-    .map((n) => ({
-      ref: n.ref,
-      direct: n.direct,
-      depth: n.depth,
-      scopes: [...n.scopes].sort(),
-      dependencies: [...n.dependencies].sort(),
-      parents: [...n.parents].sort(),
-    }))
-    .sort((a, b) => packageKey(a.ref).localeCompare(packageKey(b.ref)));
 }
