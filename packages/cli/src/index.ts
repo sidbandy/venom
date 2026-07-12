@@ -71,7 +71,7 @@ program
               ? ` (${v.bySeverity.critical} critical, ${v.bySeverity.high} high, ` +
                 `${v.bySeverity.medium} medium, ${v.bySeverity.low} low` +
                 (v.knownExploited ? `; ${v.knownExploited} actively exploited` : '') +
-                ')'
+                `) — ${result.reachableVulnerabilities.length} reachable from your code`
               : ''),
         );
         const flagged = assessments.filter((a) => a.verdict === 'flagged').length;
@@ -94,10 +94,14 @@ program
           );
         }
 
-        const vulnFindings = result.findings.filter((f) => f.category === 'vulnerability');
+        // Reachable CVEs first — those are the ones that can actually hurt you.
+        const vulnFindings = result.findings
+          .filter((f) => f.category === 'vulnerability')
+          .sort((a, b) => Number(b.properties?.reachable) - Number(a.properties?.reachable));
         for (const f of vulnFindings.slice(0, 12)) {
           const mark = f.level === 'error' ? '✖' : f.level === 'warning' ? '▲' : '·';
-          console.log(`\n  ${mark} ${f.title}`);
+          const reach = f.properties?.reachable ? ' ⟶ reachable' : '';
+          console.log(`\n  ${mark} ${f.title}${reach}`);
           if (f.remediation) console.log(`      ${f.remediation}`);
         }
         for (const a of assessments.slice(0, 8)) {

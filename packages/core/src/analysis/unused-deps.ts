@@ -1,10 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Finding } from '../types/finding';
-import { listProjectFiles, withExtensions } from '../util/files';
-import { extractImports, packageNameOf } from './imports';
-
-const SOURCE_EXT = new Set(['.js', '.cjs', '.mjs', '.jsx', '.ts', '.tsx', '.mts', '.cts']);
+import { collectImportedPackages } from './imports';
 
 export interface UnusedResult {
   unused: string[];
@@ -27,21 +24,7 @@ export async function detectUnusedDependencies(projectRoot: string): Promise<Unu
   const declared = Object.keys(pkg?.dependencies ?? {});
   if (declared.length === 0) return { unused: [], findings: [] };
 
-  const files = withExtensions(await listProjectFiles(projectRoot), SOURCE_EXT);
-  const used = new Set<string>();
-  for (const rel of files) {
-    let code: string;
-    try {
-      code = await readFile(join(projectRoot, rel), 'utf8');
-    } catch {
-      continue;
-    }
-    for (const specifier of extractImports(code)) {
-      const name = packageNameOf(specifier);
-      if (name) used.add(name);
-    }
-  }
-
+  const used = await collectImportedPackages(projectRoot);
   const unused = declared.filter((name) => !used.has(name) && !isImplicitlyUsed(name)).sort();
   return { unused, findings: unused.map(toFinding) };
 }

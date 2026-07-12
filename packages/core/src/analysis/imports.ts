@@ -1,8 +1,35 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
+import { listProjectFiles, withExtensions } from '../util/files';
 
 const traverse = ((_traverse as unknown as { default?: typeof _traverse }).default ??
   _traverse) as typeof _traverse;
+
+const SOURCE_EXTENSIONS = new Set(['.js', '.cjs', '.mjs', '.jsx', '.ts', '.tsx', '.mts', '.cts']);
+
+/**
+ * Collect the set of package names a project's own source imports. Shared by the
+ * unused-dependency detector and reachability analysis.
+ */
+export async function collectImportedPackages(projectRoot: string): Promise<Set<string>> {
+  const files = withExtensions(await listProjectFiles(projectRoot), SOURCE_EXTENSIONS);
+  const used = new Set<string>();
+  for (const rel of files) {
+    let code: string;
+    try {
+      code = await readFile(join(projectRoot, rel), 'utf8');
+    } catch {
+      continue;
+    }
+    for (const specifier of extractImports(code)) {
+      const name = packageNameOf(specifier);
+      if (name) used.add(name);
+    }
+  }
+  return used;
+}
 
 /**
  * Extract the module specifiers a JS/TS source file imports — via `import`,

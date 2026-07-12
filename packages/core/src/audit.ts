@@ -5,13 +5,19 @@ import type { Vulnerability } from './types/vulnerability';
 import type { Secret } from './types/secret';
 import type { UpdatePlanEntry } from './types/update';
 import type { HealthScore } from './types/health';
+import { packageKey } from './types/ecosystem';
 import { inventoryProject, summarizeGraph, type InventorySummary } from './inventory/index';
 import { scanVulnerabilities } from './vulnerabilities/index';
 import { scanMalicious, type PackageAssessment } from './malicious/index';
 import { scanSecrets } from './secrets/index';
 import { buildUpdatePlan } from './remediation/index';
 import { computeHealthScore } from './health/index';
-import { detectUnusedDependencies, checkLicenses, checkSecretsHygiene } from './analysis/index';
+import {
+  detectUnusedDependencies,
+  checkLicenses,
+  checkSecretsHygiene,
+  computeReachablePackages,
+} from './analysis/index';
 
 export interface AuditOptions {
   /** Scan git history for secrets (in addition to the working tree). Default true. */
@@ -31,6 +37,10 @@ export interface AuditResult {
   updatePlan: UpdatePlanEntry[];
   /** Declared-but-unused production dependencies (Section 5). */
   unusedDependencies: string[];
+  /** Package keys reachable from the project's own source imports (Bigger bets). */
+  reachablePackages: ReadonlySet<string>;
+  /** The subset of `vulnerabilities` in packages the project's code can actually reach. */
+  reachableVulnerabilities: Vulnerability[];
   healthScore: HealthScore;
   /** All findings from every module + Section-5 analysis, aggregated (ready for SARIF). */
   findings: Finding[];
@@ -52,6 +62,20 @@ export async function auditProject(
 
   const { vulnerabilities, findings: vulnFindings } = await scanVulnerabilities(graph, ctx);
   const { assessments, findings: malFindings } = await scanMalicious(graph, ctx);
+
+  // Reachability: which packages the project's own code can actually reach.
+  const reachablePackages = await computeReachablePackages(ctx.projectRoot, graph);
+  const reachableVulnerabilities = vulnerabilities.filter((v) =>
+    reachablePackages.has(packageKey(v.affected)),
+  );
+  for (const f of vulnFindings) {
+    if (f.relatedPackage) {
+      f.properties = {
+        ...f.properties,
+        reachable: reachablePackages.has(packageKey(f.relatedPackage)),
+      };
+    }
+  }
   // scanSecrets treats undefined history/breachCheck as its defaults (both true).
   const secretsOpts: { history?: boolean; breachCheck?: boolean } = {};
   if (options.history !== undefined) secretsOpts.history = options.history;
@@ -78,6 +102,7 @@ export async function auditProject(
     assessments,
     secrets,
     updatePlan,
+    reachablePackages,
   });
 
   return {
@@ -88,6 +113,8 @@ export async function auditProject(
     secrets,
     updatePlan,
     unusedDependencies: unused,
+    reachablePackages,
+    reachableVulnerabilities,
     healthScore,
     findings: [
       ...vulnFindings,

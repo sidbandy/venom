@@ -15,11 +15,12 @@ _Last updated: 2026-07-12 (V1 spec complete: all 3 surfaces + demo repos)._
 Beyond finishing the spec (see the phase plan), these are the differentiators that
 would move Venom from "a good SCA tool" to something genuinely ahead of the market.
 
-- 🔴 **Reachability analysis.** Most CVEs in transitive deps are never actually
-  reachable from your code. Build a call graph and only escalate a vulnerability
-  when the vulnerable symbol is truly invoked. This is the single biggest
-  noise-reduction lever and what the leading commercial tools charge for — it
-  turns "200 findings" into "the 4 that can actually hurt you."
+- ✅ **Reachability analysis (package-level).** Implemented: `computeReachablePackages`
+  seeds from the direct dependencies the source actually imports and walks the
+  resolved graph, so CVEs in packages your code can't reach are de-prioritized in
+  the audit and weighted less in the Health Score. **Next refinement:** symbol-level
+  (call-graph) reachability — escalate only when the vulnerable _function_ is
+  invoked, the further noise-reduction lever the leading commercial tools charge for.
 - 🔴 **Version-diff threat detection ("what changed").** The real attacks
   (event-stream, xz) are _updates_ that turn a trusted package malicious. When a
   dependency bumps, diff the two versions: new maintainers, newly-added install

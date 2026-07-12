@@ -58,6 +58,8 @@ export {
   checkSecretsHygiene,
   extractImports,
   packageNameOf,
+  collectImportedPackages,
+  computeReachablePackages,
 } from './analysis/index';
 export type { UnusedResult, LicenseResult, LicenseOptions, HygieneResult } from './analysis/index';
 

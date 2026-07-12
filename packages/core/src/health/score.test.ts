@@ -74,4 +74,17 @@ describe('computeHealthScore', () => {
     expect(result.components.map((c) => c.id)).not.toContain('dependency-freshness');
     expect(result.components.reduce((s, c) => s + c.weight, 0)).toBeCloseTo(0.85);
   });
+
+  it('penalizes an unreachable CVE less than a reachable one', () => {
+    const withVuln = inputs({ vulnerabilities: [criticalVuln] });
+    const reachable = computeHealthScore({
+      ...withVuln,
+      reachablePackages: new Set(['npm:bad@1.0.0']),
+    }).score;
+    const unreachable = computeHealthScore({
+      ...withVuln,
+      reachablePackages: new Set(),
+    }).score;
+    expect(unreachable).toBeGreaterThan(reachable);
+  });
 });

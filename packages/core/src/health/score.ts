@@ -1,9 +1,13 @@
+import { packageKey } from '../types/ecosystem';
 import type { InventorySummary } from '../inventory/build-graph';
 import type { PackageAssessment } from '../malicious/assess';
 import type { HealthComponent, HealthGrade, HealthScore } from '../types/health';
 import type { Secret } from '../types/secret';
 import type { UpdatePlanEntry } from '../types/update';
 import type { Vulnerability } from '../types/vulnerability';
+
+/** How much an unreachable CVE counts toward the score relative to a reachable one. */
+const UNREACHABLE_WEIGHT = 0.4;
 
 export interface HealthInputs {
   summary: InventorySummary;
@@ -12,6 +16,11 @@ export interface HealthInputs {
   secrets: Secret[];
   /** Optional: when present, dependency freshness contributes to the score. */
   updatePlan?: UpdatePlanEntry[];
+  /**
+   * Optional set of reachable package keys. When provided, CVEs in packages your
+   * code can't actually reach are penalized less — reflecting true exposure.
+   */
+  reachablePackages?: ReadonlySet<string>;
 }
 
 export interface HealthScoreOptions {
@@ -30,7 +39,7 @@ export function computeHealthScore(
   options: HealthScoreOptions = {},
 ): HealthScore {
   const components: HealthComponent[] = [
-    cveComponent(inputs.vulnerabilities),
+    cveComponent(inputs.vulnerabilities, inputs.reachablePackages),
     secretsComponent(inputs.secrets),
     maintainerComponent(inputs.assessments),
     depthComponent(inputs.summary),
@@ -49,20 +58,26 @@ export function computeHealthScore(
   };
 }
 
-function cveComponent(vulns: Vulnerability[]): HealthComponent {
+function cveComponent(vulns: Vulnerability[], reachable?: ReadonlySet<string>): HealthComponent {
   let penalty = 0;
   let critical = 0;
   let high = 0;
+  let reachableCount = 0;
   for (const v of vulns) {
+    let base = 0;
     if (v.severity === 'critical') {
-      penalty += 25;
+      base += 25;
       critical++;
     } else if (v.severity === 'high') {
-      penalty += 12;
+      base += 12;
       high++;
-    } else if (v.severity === 'medium') penalty += 5;
-    else if (v.severity === 'low') penalty += 1;
-    if (v.knownExploited) penalty += 15;
+    } else if (v.severity === 'medium') base += 5;
+    else if (v.severity === 'low') base += 1;
+    if (v.knownExploited) base += 15;
+
+    const isReachable = !reachable || reachable.has(packageKey(v.affected));
+    if (isReachable) reachableCount++;
+    penalty += base * (isReachable ? 1 : UNREACHABLE_WEIGHT);
   }
   return {
     id: 'cve-exposure',
@@ -70,7 +85,9 @@ function cveComponent(vulns: Vulnerability[]): HealthComponent {
     score: clamp(100 - penalty),
     weight: 0.35,
     summary: vulns.length
-      ? `${vulns.length} known ${vulns.length === 1 ? 'vulnerability' : 'vulnerabilities'} (${critical} critical, ${high} high)`
+      ? `${vulns.length} known vulnerabilit${vulns.length === 1 ? 'y' : 'ies'} (${critical} critical, ${high} high` +
+        (reachable ? `; ${reachableCount} reachable` : '') +
+        ')'
       : 'No known vulnerabilities',
   };
 }

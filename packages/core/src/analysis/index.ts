@@ -4,4 +4,5 @@ export { checkLicenses } from './licenses';
 export type { LicenseResult, LicenseOptions } from './licenses';
 export { checkSecretsHygiene } from './secrets-hygiene';
 export type { HygieneResult } from './secrets-hygiene';
-export { extractImports, packageNameOf } from './imports';
+export { extractImports, packageNameOf, collectImportedPackages } from './imports';
+export { computeReachablePackages } from './reachability';
