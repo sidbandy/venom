@@ -103,6 +103,21 @@ describe('assessPackage', () => {
     expect(result.findings.map((f) => f.ruleId)).toContain('venom/typosquat');
   });
 
+  it('flags a cross-ecosystem typosquat and a not-found package', async () => {
+    // `reqeusts` is edit-distance 2 from PyPI's famous `requests`, even on npm,
+    // and doesn't resolve in the registry.
+    const adapter = new FakeAdapter({ popular: [], meta: null });
+    const result = await assessPackage(adapter, ref('reqeusts'), ctx(), {
+      flagNotFound: true,
+      metadata: true,
+      now: NOW,
+    });
+    const rules = result.findings.map((f) => f.ruleId);
+    expect(rules).toContain('venom/typosquat');
+    expect(rules).toContain('venom/not-found');
+    expect(result.verdict).toBe('flagged');
+  });
+
   it('flags a dangerous install script', async () => {
     const meta = {
       ...healthyMeta('build-tool'),

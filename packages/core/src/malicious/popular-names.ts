@@ -204,3 +204,15 @@ const BY_ECOSYSTEM: Record<Ecosystem, readonly string[]> = {
 export function popularNamesFor(ecosystem: Ecosystem): readonly string[] {
   return BY_ECOSYSTEM[ecosystem];
 }
+
+let allPopular: readonly string[] | undefined;
+
+/**
+ * The union of popular names across all ecosystems, deduped. Used for typosquat
+ * detection so a name like `reqeusts` on npm still flags against PyPI's famous
+ * `requests` — attackers impersonate well-known names across registries.
+ */
+export function popularNamesForAll(): readonly string[] {
+  if (!allPopular) allPopular = [...new Set([...NPM_POPULAR, ...PYPI_POPULAR])];
+  return allPopular;
+}

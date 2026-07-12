@@ -122,13 +122,11 @@ would move Venom from "a good SCA tool" to something genuinely ahead of the mark
 - 🟡 **CVSS v2 and v4 numeric scoring.** We compute v3.0/3.1 base scores precisely;
   v2/v4 vectors currently fall back to the advisory's qualitative severity label.
   Add the v2 and (more involved) v4 base-score formulas for full numeric coverage.
-- 🟡 **Cross-ecosystem typosquat targets.** Typosquat checks compare a name only
-  against its own ecosystem's popular list. `reqeusts` on npm should also flag
-  against PyPI's `requests` (attackers impersonate famous names across registries).
-  Feed a merged popular-name set into the check.
-- 🟡 **Non-existent-package signal in the Bouncer.** When `venom check` finds no
-  registry metadata (404 vs. transient error, disambiguated), surface it — a name
-  that doesn't resolve is often a typo or a not-yet-published squat.
+- ✅ **Cross-ecosystem typosquat targets.** The Bouncer now matches against the
+  union of npm + PyPI popular names, so `reqeusts` on npm flags against PyPI's
+  `requests`.
+- ✅ **Non-existent-package signal in the Bouncer.** `venom check` now flags a
+  name that doesn't resolve in the registry (likely a typo or unpublished squat).
 - 🟢 **Maintainer accounts for PyPI.** The JSON API doesn't expose maintainer
   accounts (only free-text author), so single-maintainer detection is npm-only
   today. Use an authenticated source or the web profile to get real PyPI

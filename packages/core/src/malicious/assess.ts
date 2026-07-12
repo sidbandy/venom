@@ -10,6 +10,7 @@ import { toPurl } from '../inventory/purl';
 import { mapWithConcurrency } from '../util/concurrency';
 import { detectTyposquat } from './typosquat';
 import { detectHomoglyphs } from './homoglyph';
+import { popularNamesForAll } from './popular-names';
 import { assessMaintainerRisk } from './maintainer-risk';
 import { inspectInstallScripts } from './install-scripts';
 import { scanSourceTree } from './scan-source-tree';
@@ -30,6 +31,12 @@ export interface AssessOptions {
   deep?: boolean;
   /** Fetch registry metadata (maintainer risk, install scripts). */
   metadata?: boolean;
+  /**
+   * Flag when the package can't be found in the registry. On for the Bouncer
+   * (a name that doesn't resolve is often a typo or an unpublished squat); off
+   * for tree scans, where an installed dependency is known to exist.
+   */
+  flagNotFound?: boolean;
   /** Clock injection for deterministic tests. */
   now?: Date;
 }
@@ -59,8 +66,19 @@ export async function assessPackage(
   const meta = options.metadata === false ? null : await adapter.fetchMetadata(ref, ctx);
   const subject = meta?.ref ?? ref;
 
+  // The package doesn't resolve in the registry — likely a typo or a squat that
+  // isn't published (yet). Only meaningful when we actually asked and are online.
+  if (options.flagNotFound && !meta && options.metadata !== false && !ctx.config.offline) {
+    const reason = 'Package not found in the registry — likely a typo or unpublished name';
+    record(
+      make('venom/not-found', 'warning', subject, 'Package not found in registry', reason),
+      reason,
+    );
+  }
+
   // --- Name-based checks (offline, always run) ---
-  const typo = detectTyposquat(ref.name, await adapter.popularNames(ctx));
+  // Match against the union of ecosystems' popular names (cross-ecosystem squats).
+  const typo = detectTyposquat(ref.name, popularNamesForAll());
   if (typo.suspicious) {
     const reason = `Levenshtein distance ${typo.distance} from popular package "${typo.target}"`;
     record(
@@ -199,6 +217,7 @@ export async function checkCandidate(
   return assessPackage(adapter, ref, ctx, {
     deep: options.deep ?? true,
     metadata: true,
+    flagNotFound: true,
     ...(options.now ? { now: options.now } : {}),
   });
 }
