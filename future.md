@@ -119,9 +119,9 @@ would move Venom from "a good SCA tool" to something genuinely ahead of the mark
   Health cards (last-update, maintainer count, weekly downloads, transitive count)
   fold naturally into `venom check` output and the VS Code hover; the before/after
   dependency diff belongs to the CI action (compare base vs PR graphs).
-- 🟡 **CVSS v2 and v4 numeric scoring.** We compute v3.0/3.1 base scores precisely;
-  v2/v4 vectors currently fall back to the advisory's qualitative severity label.
-  Add the v2 and (more involved) v4 base-score formulas for full numeric coverage.
+- 🟡 **CVSS v4 numeric scoring.** We now compute v2.0 and v3.0/3.1 base scores
+  precisely (v2 detected even in its bare, prefix-less form via the `Au:` metric).
+  v4's materially more complex scoring is the remaining piece.
 - ✅ **Cross-ecosystem typosquat targets.** The Bouncer now matches against the
   union of npm + PyPI popular names, so `reqeusts` on npm flags against PyPI's
   `requests`.

@@ -30,15 +30,19 @@ export function cvssVersionOf(vector: string): CvssVersion {
   const match = /^CVSS:(\d\.\d)/.exec(vector);
   const v = match?.[1];
   if (v === '2.0' || v === '3.0' || v === '3.1' || v === '4.0') return v;
+  // v2 vectors are frequently bare (no CVSS: prefix); the `Au:` metric is v2-only.
+  if (/(?:^|\/)Au:/.test(vector)) return '2.0';
   return '3.1';
 }
 
 /**
- * Compute a CVSS v3.0/3.1 base score from a vector string. Returns `undefined`
- * for vectors we don't score numerically (v2/v4) or malformed input.
+ * Compute a CVSS base score from a vector string. Supports v2.0 and v3.0/3.1
+ * precisely; returns `undefined` for v4 (whose scoring is materially more complex)
+ * or malformed input.
  */
 export function computeBaseScore(vector: string): number | undefined {
   const version = cvssVersionOf(vector);
+  if (version === '2.0') return computeBaseScoreV2(vector);
   if (version !== '3.0' && version !== '3.1') return undefined;
 
   const m = parseCvssVector(vector);
@@ -64,6 +68,30 @@ export function computeBaseScore(vector: string): number | undefined {
     ? Math.min(1.08 * (impact + exploitability), 10)
     : Math.min(impact + exploitability, 10);
   return roundUp(raw);
+}
+
+// --- CVSS v2 ---
+const V2_AV = { L: 0.395, A: 0.646, N: 1.0 } as const;
+const V2_AC = { H: 0.35, M: 0.61, L: 0.71 } as const;
+const V2_AU = { M: 0.45, S: 0.56, N: 0.704 } as const;
+const V2_IMPACT = { N: 0.0, P: 0.275, C: 0.66 } as const;
+
+/** Compute a CVSS v2.0 base score from its vector (the classic pre-v3 formula). */
+function computeBaseScoreV2(vector: string): number | undefined {
+  const m = parseCvssVector(vector);
+  const av = V2_AV[m.AV as keyof typeof V2_AV];
+  const ac = V2_AC[m.AC as keyof typeof V2_AC];
+  const au = V2_AU[m.Au as keyof typeof V2_AU];
+  const c = V2_IMPACT[m.C as keyof typeof V2_IMPACT];
+  const i = V2_IMPACT[m.I as keyof typeof V2_IMPACT];
+  const a = V2_IMPACT[m.A as keyof typeof V2_IMPACT];
+  if ([av, ac, au, c, i, a].some((x) => x === undefined)) return undefined;
+
+  const impact = 10.41 * (1 - (1 - c!) * (1 - i!) * (1 - a!));
+  const exploitability = 20 * av! * ac! * au!;
+  const fImpact = impact === 0 ? 0 : 1.176;
+  const base = (0.6 * impact + 0.4 * exploitability - 1.5) * fImpact;
+  return Math.round(base * 10) / 10;
 }
 
 function privilegesRequired(value: string | undefined, scopeChanged: boolean): number | undefined {

@@ -11,8 +11,13 @@ describe('computeBaseScore (CVSS 3.1)', () => {
     expect(computeBaseScore('CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N')).toBe(0);
   });
 
-  it('returns undefined for versions it does not score numerically', () => {
-    expect(computeBaseScore('CVSS:2.0/AV:N/AC:L/Au:N/C:P/I:P/A:P')).toBeUndefined();
+  it('scores CVSS v2 vectors (incl. bare, prefix-less form)', () => {
+    expect(computeBaseScore('CVSS:2.0/AV:N/AC:L/Au:N/C:C/I:C/A:C')).toBe(10);
+    expect(computeBaseScore('AV:N/AC:L/Au:N/C:C/I:C/A:C')).toBe(10); // bare v2, detected via Au:
+    expect(computeBaseScore('AV:N/AC:L/Au:N/C:N/I:N/A:N')).toBe(0);
+  });
+
+  it('returns undefined for CVSS v4 (not yet scored) and malformed input', () => {
     expect(computeBaseScore('CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H')).toBeUndefined();
   });
 });
