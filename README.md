@@ -112,8 +112,10 @@ npm run format        # prettier
 
 ## Status
 
-The full V1 scope is built and tested: the engine (Modules 1–5), the composite
+The full V1 scope is built and tested — the engine (Modules 1–5), the composite
 Health Score + history, all three surfaces (CLI, VS Code extension, GitHub
-Action), policy-as-code, and the four curated [demo repos](./demo/). Not yet
-published to npm/the Marketplace — see [`future.md`](./future.md) for what's next
-(reachability analysis, version-diff threat detection, provenance verification).
+Action), policy-as-code, and the four curated [demo repos](./demo/) — plus
+several beyond-spec differentiators (reachability, version-diff, `venom install`,
+pnpm/Yarn). Not yet published to npm/the Marketplace — see
+[`future.md`](./future.md) for what's next (symbol-level reachability,
+provenance/source↔artifact verification, AI-assisted triage).
