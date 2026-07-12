@@ -52,6 +52,16 @@ describe('scanContent', () => {
     expect(scanContent('api_key = "your-api-key-here"')).toHaveLength(0);
   });
 
+  it('detects newer service credential formats', () => {
+    const hf = `hf_${'abcdefghijklmnopqrstuvwxyz01234567'}`; // 34 chars
+    const shopify = `shpat_${'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6'}`; // 32 hex
+    const linear = `lin_api_${'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcd'}`; // 40
+    const found = scanContent([`t1 = "${hf}"`, `t2 = "${shopify}"`, `t3 = "${linear}"`].join('\n'));
+    expect(found.map((f) => f.patternId)).toEqual(
+      expect.arrayContaining(['huggingface-token', 'shopify-token', 'linear-key']),
+    );
+  });
+
   it('ignores canonical documentation/example credentials', () => {
     // AWS's own documented example key appears in countless docs/tutorials.
     expect(scanContent('const k = "AKIAIOSFODNN7EXAMPLE";')).toHaveLength(0);
