@@ -55,15 +55,12 @@ would move Venom from "a good SCA tool" to something genuinely ahead of the mark
 - 🟢 **Blast-radius view & health badges.** Interactive graph of which features
   depend on a risky package (and what breaks if removed), plus a README
   `Supply Chain Health: 91/100` badge endpoint.
-- 🟡 **API/SDK-dependency awareness.** Projects that lean on many third-party APIs
-  (Stripe, OpenAI, Twilio, AWS, …) pull in the matching client SDKs — Venom already
-  vets those packages for CVEs, malicious code, typosquats, and maintainer risk, and
-  already catches their leaked keys (`sk_live_`, OpenAI, AWS, GitHub) in code + git
-  history. Extend this into a first-class **"API surface" report**: group findings by
-  the external service each SDK talks to, flag deprecated/outdated SDK major versions,
-  detect hardcoded API base URLs pointing at look-alike/typosquatted domains, and warn
-  when an SDK performs network calls at install time. (Live endpoint uptime/health is
-  out of scope — that's runtime monitoring, a different product.)
+- ✅ **API/SDK-dependency awareness.** Implemented as `venom api`: detects the
+  third-party API client SDKs a project uses (Stripe, OpenAI, AWS, Twilio, Slack,
+  GitHub, …, via an exact + scoped-prefix map) and groups them by external service,
+  showing per-service SDK freshness, CVEs, and leaked credentials. **Next:** detect
+  hardcoded API base URLs pointing at look-alike domains, and warn when an SDK runs
+  network calls at install time.
 
 ---
 

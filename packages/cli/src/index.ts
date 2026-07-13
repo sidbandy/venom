@@ -22,6 +22,7 @@ import {
   applyNpmUpdates,
   detectUnusedDependencies,
   checkLicenses,
+  analyzeApiSurface,
   loadPolicy,
   evaluatePolicy,
   STARTER_POLICY,
@@ -292,6 +293,50 @@ program
       console.log(`${unused.length} unused production dependencies:\n`);
       for (const name of unused) console.log(`  · ${name}`);
       process.exitCode = 1;
+    });
+  });
+
+program
+  .command('api')
+  .description('Report the project’s external-API surface (SDKs grouped by service)')
+  .argument('[dir]', 'project directory', '.')
+  .option('--offline', 'do not make any network calls', false)
+  .action(async (dir: string, opts: { offline: boolean }) => {
+    await withProject(dir, async (projectRoot) => {
+      const ctx = await makeContext(projectRoot, opts.offline);
+      try {
+        const result = await auditProject(ctx);
+        const { entries, leakedKeysByService } = analyzeApiSurface(result);
+        const services = [...new Set(entries.map((e) => e.service))].sort();
+        if (services.length === 0 && Object.keys(leakedKeysByService).length === 0) {
+          console.log('No third-party API SDKs detected.');
+          return;
+        }
+        console.log(`\nAPI surface — ${services.length} external service(s)\n`);
+        for (const service of services) {
+          const leaked = leakedKeysByService[service] ?? 0;
+          console.log(`  ${service}${leaked ? `  🔑 ${leaked} leaked credential(s)` : ''}`);
+          for (const e of entries.filter((x) => x.service === service)) {
+            const flags = [
+              e.cves.length ? `✖ ${e.cves.length} CVE(s): ${e.cves.slice(0, 3).join(', ')}` : '',
+              e.majorBehind
+                ? '▲ major update available'
+                : e.outdated
+                  ? '△ update available'
+                  : '✓ current',
+            ].filter(Boolean);
+            console.log(`     ${e.package}@${e.version} — ${flags.join(' · ')}`);
+          }
+        }
+        for (const [service, count] of Object.entries(leakedKeysByService)) {
+          if (!services.includes(service)) {
+            console.log(`\n  ${service}  🔑 ${count} leaked credential(s) (no SDK dependency)`);
+          }
+        }
+        console.log('');
+      } finally {
+        ctx.dispose();
+      }
     });
   });
 

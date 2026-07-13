@@ -6,3 +6,5 @@ export { checkSecretsHygiene } from './secrets-hygiene';
 export type { HygieneResult } from './secrets-hygiene';
 export { extractImports, packageNameOf, collectImportedPackages } from './imports';
 export { computeReachablePackages } from './reachability';
+export { analyzeApiSurface, serviceForPackage } from './api-surface';
+export type { ApiSurface, ApiSdkEntry } from './api-surface';

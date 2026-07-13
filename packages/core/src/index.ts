@@ -64,8 +64,17 @@ export {
   packageNameOf,
   collectImportedPackages,
   computeReachablePackages,
+  analyzeApiSurface,
+  serviceForPackage,
 } from './analysis/index';
-export type { UnusedResult, LicenseResult, LicenseOptions, HygieneResult } from './analysis/index';
+export type {
+  UnusedResult,
+  LicenseResult,
+  LicenseOptions,
+  HygieneResult,
+  ApiSurface,
+  ApiSdkEntry,
+} from './analysis/index';
 
 // The full audit pipeline — the single orchestration every surface calls.
 export { auditProject } from './audit';
