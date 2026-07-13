@@ -6,7 +6,8 @@ build. Kept separate from `SPEC.md` (the product definition) — this is the
 
 **Legend:** 🔴 high value · 🟡 medium · 🟢 nice-to-have · ✅ done
 
-_Last updated: 2026-07-12 (V1 spec complete: all 3 surfaces + demo repos)._
+_Last updated: 2026-07-12 (post-V1 runway: reachability, version-diff, provenance,
+pnpm/Yarn Classic+Berry, 41 secret patterns, CVSS v2, --json/badge, error taxonomy)._
 
 ---
 
@@ -81,9 +82,10 @@ would move Venom from "a good SCA tool" to something genuinely ahead of the mark
   a fixed `documentId`/`timestamp` is passed; the default uses a random UUID + now.
   Add a `--deterministic` flag (or derive the serial from a content hash) so
   default CI runs diff cleanly.
-- 🟡 **Shared error taxonomy + exit codes.** Introduce a `VenomError` base with
-  stable `code`s so the CLI maps failures to consistent exit statuses (distinct
-  from the pass/fail _gating_ codes the CI phase will add).
+- ✅ **Shared error taxonomy.** Implemented: a `VenomError` base with stable
+  `code`s (`OFFLINE`, `DISALLOWED_HOST`, `HTTP_ERROR`, `TARBALL_SECURITY`,
+  `NO_LOCKFILE`); every engine error extends it. **Next:** map codes to distinct
+  CLI exit statuses.
 
 ## Detection & accuracy
 

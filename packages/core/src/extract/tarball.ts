@@ -5,6 +5,7 @@ import { join, resolve, sep, dirname } from 'node:path';
 import { Readable } from 'node:stream';
 import { createGunzip } from 'node:zlib';
 import { extract as tarExtract, type Headers as TarHeaders } from 'tar-stream';
+import { VenomError } from '../errors';
 
 /**
  * Raised when a tarball entry attempts something a legitimate package never
@@ -12,9 +13,9 @@ import { extract as tarExtract, type Headers as TarHeaders } from 'tar-stream';
  * This is treated as a hard, loud failure: it is itself a signal that the package
  * may be malicious.
  */
-export class TarballSecurityError extends Error {
+export class TarballSecurityError extends VenomError {
   constructor(message: string) {
-    super(message);
+    super('TARBALL_SECURITY', message);
     this.name = 'TarballSecurityError';
   }
 }

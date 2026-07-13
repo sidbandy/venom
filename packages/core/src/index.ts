@@ -12,6 +12,10 @@ export const VERSION = '0.1.0';
 // The domain model — the shared vocabulary of the engine.
 export * from './types/index';
 
+// Error taxonomy — every engine error extends VenomError and carries a `code`.
+export { VenomError } from './errors';
+export type { VenomErrorCode } from './errors';
+
 // Cross-cutting infrastructure callers use to build a ScanContext.
 export { VenomHttpClient, DisallowedHostError, HttpError, OfflineError } from './net/index';
 export type { VenomHttpClientOptions, FetchFn } from './net/index';

@@ -1,15 +1,17 @@
 import type { EcosystemAdapter, EcosystemParseResult } from '../types/adapter';
 import type { DependencyGraph } from '../types/graph';
+import { VenomError } from '../errors';
 import { buildDependencyGraph } from './build-graph';
 import { NpmAdapter } from './npm-adapter';
 import { PypiAdapter } from './pypi-adapter';
 
 /** Raised when a project has no lockfile any registered adapter can parse. */
-export class NoSupportedLockfileError extends Error {
+export class NoSupportedLockfileError extends VenomError {
   constructor(projectRoot: string) {
     super(
+      'NO_LOCKFILE',
       `No supported lockfile found under ${projectRoot}. ` +
-        `Venom v1 understands npm (package-lock.json) and PyPI (poetry.lock, requirements.txt).`,
+        `Venom understands npm (package-lock.json), pnpm, Yarn, and PyPI (poetry.lock, requirements.txt).`,
     );
     this.name = 'NoSupportedLockfileError';
   }

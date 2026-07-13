@@ -1,11 +1,13 @@
+import { VenomError } from '../errors';
+
 /**
  * Raised when a network call is attempted in offline mode. Callers should treat
  * this as "degrade gracefully" — serve cached/bundled data or skip the check —
  * never as a crash.
  */
-export class OfflineError extends Error {
+export class OfflineError extends VenomError {
   constructor(url: string) {
-    super(`Offline mode: refused network request to ${url}`);
+    super('OFFLINE', `Offline mode: refused network request to ${url}`);
     this.name = 'OfflineError';
   }
 }
@@ -16,10 +18,11 @@ export class OfflineError extends Error {
  * code path would have leaked data to an unapproved destination, violating the
  * zero-telemetry guarantee (SPEC.md §8). It should surface loudly.
  */
-export class DisallowedHostError extends Error {
+export class DisallowedHostError extends VenomError {
   readonly host: string;
   constructor(host: string, url: string) {
     super(
+      'DISALLOWED_HOST',
       `Refused request to non-allowlisted host "${host}" (${url}). ` +
         `Venom only contacts a fixed set of public APIs; see net/hosts.ts.`,
     );
@@ -29,11 +32,11 @@ export class DisallowedHostError extends Error {
 }
 
 /** Raised for non-2xx HTTP responses after retries are exhausted. */
-export class HttpError extends Error {
+export class HttpError extends VenomError {
   readonly status: number;
   readonly url: string;
   constructor(status: number, url: string, statusText?: string) {
-    super(`HTTP ${status}${statusText ? ` ${statusText}` : ''} for ${url}`);
+    super('HTTP_ERROR', `HTTP ${status}${statusText ? ` ${statusText}` : ''} for ${url}`);
     this.name = 'HttpError';
     this.status = status;
     this.url = url;
