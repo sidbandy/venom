@@ -31,7 +31,7 @@ would move Venom from "a good SCA tool" to something genuinely ahead of the mark
 - 🟡 **Provenance & source↔artifact verification.** Implemented: Venom detects
   whether an npm package was published with a signed build-provenance attestation
   (SLSA) and surfaces it in `venom check` (✓/·), and `venom diff` flags when a
-  version *drops* provenance it previously had. **Next:** fetch and cryptographically
+  version _drops_ provenance it previously had. **Next:** fetch and cryptographically
   verify the attestation (Sigstore), and compare the published tarball against the
   upstream git tag — "this artifact does not match its source" is the exact xz gap.
 - 🔴 **AI-assisted triage & explanation (optional, local-respecting).** An opt-in
@@ -147,8 +147,10 @@ would move Venom from "a good SCA tool" to something genuinely ahead of the mark
 - 🟡 **Richer SBOM fields.** Populate `hashes` (integrity is already in lockfiles),
   `licenses` (once license extraction lands, Section 5), and `externalReferences`
   (VCS/registry). SPDX: `PackageVerificationCode`, supplier/originator.
-- 🟡 **Global `--json` output** for every command (not only `sbom`), for scripting
-  and the IDE plugin — a stable machine-readable envelope around findings.
+- ✅ **`--json` audit output + `venom badge`.** `venom audit --json` emits the
+  full result as JSON for scripting; `venom badge` outputs a shields.io endpoint
+  JSON for a README `Supply Chain Health` badge. (Extending `--json` to every
+  command is the small remaining piece.)
 - 🟢 **SBOM signing / attestation** (Sigstore/cosign, in-toto) so a generated SBOM
   can be verified downstream.
 

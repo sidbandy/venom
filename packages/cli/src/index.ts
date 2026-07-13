@@ -49,12 +49,18 @@ program
   .argument('[dir]', 'project directory', '.')
   .option('--offline', 'do not make any network calls; use cached/bundled data only', false)
   .option('--sarif <file>', 'write all findings as SARIF 2.1.0 to a file')
-  .action(async (dir: string, opts: { offline: boolean; sarif?: string }) => {
+  .option('--json', 'output the full audit result as JSON (for scripting)')
+  .action(async (dir: string, opts: { offline: boolean; sarif?: string; json?: boolean }) => {
     await withProject(dir, async (projectRoot) => {
       const ctx = await makeContext(projectRoot, opts.offline);
       try {
         const result = await auditProject(ctx);
         recordScore(ctx, result);
+
+        if (opts.json) {
+          console.log(JSON.stringify(auditToJson(result), null, 2));
+          return;
+        }
 
         const { summary: inv, assessments, secrets, healthScore: h } = result;
         const v = summarizeVulnerabilities(result.vulnerabilities);
@@ -151,6 +157,40 @@ program
           console.log(`\n  Trend: ${trend.map((r) => r.score).join(' → ')}`);
         }
         console.log('');
+      } finally {
+        ctx.dispose();
+      }
+    });
+  });
+
+program
+  .command('badge')
+  .description('Output a shields.io endpoint JSON for the health score (for a README badge)')
+  .argument('[dir]', 'project directory', '.')
+  .option('--offline', 'do not make any network calls', false)
+  .action(async (dir: string, opts: { offline: boolean }) => {
+    await withProject(dir, async (projectRoot) => {
+      const ctx = createScanContext({ projectRoot, offline: opts.offline });
+      try {
+        const { healthScore: h } = await auditProject(ctx);
+        const color =
+          h.score >= 90
+            ? 'brightgreen'
+            : h.score >= 80
+              ? 'green'
+              : h.score >= 70
+                ? 'yellowgreen'
+                : h.score >= 60
+                  ? 'orange'
+                  : 'red';
+        console.log(
+          JSON.stringify({
+            schemaVersion: 1,
+            label: 'supply chain',
+            message: `${h.score}/100 (${h.grade})`,
+            color,
+          }),
+        );
       } finally {
         ctx.dispose();
       }
@@ -509,6 +549,21 @@ function recordScore(ctx: ScanContextHandle, result: AuditResult): ScoreRecord[]
 
 function bar(score: number): string {
   return '█'.repeat(Math.round(score / 10)).padEnd(10, '░');
+}
+
+/** A JSON-safe projection of an audit result (drops in-memory Maps/Sets). */
+function auditToJson(result: AuditResult): Record<string, unknown> {
+  return {
+    project: result.graph.root,
+    healthScore: result.healthScore,
+    summary: result.summary,
+    vulnerabilities: result.vulnerabilities,
+    reachableVulnerabilityCount: result.reachableVulnerabilities.length,
+    assessments: result.assessments,
+    secrets: result.secrets,
+    unusedDependencies: result.unusedDependencies,
+    findings: result.findings,
+  };
 }
 
 /** Spawn a command, inheriting stdio, and resolve with its exit code. */
