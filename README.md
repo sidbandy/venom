@@ -25,12 +25,15 @@ CLI and CI surfaces are built and tested:
 | **Health & policy**           | A composite **0–100 Health Score** with trend history, unused-dependency + license checks, SARIF output, and `.venom.yml` **policy-as-code** gating in CI.                                         |
 
 Beyond the spec, Venom also does what the leading commercial tools charge for:
-**reachability analysis** (CVEs in packages your code can't actually reach are
-de-prioritized and weighted less), **version-diff threat detection**
-(`venom diff` flags the event-stream/xz _update_ pattern — new maintainers,
-install scripts, or dangerous code capabilities between two versions), a literal
-**`venom install`** bouncer that vets then installs (or refuses), and **npm +
-pnpm + Yarn** lockfile support.
+
+- **Reachability analysis** — CVEs in packages your code can't actually reach are de-prioritized and weighted less in the score.
+- **Version-diff threat detection** (`venom diff`) — flags the event-stream/xz _update_ pattern: new maintainers, install scripts, dangerous code capabilities, or dropped build provenance between two versions.
+- **Build-provenance verification** — detects signed source→artifact attestations (SLSA), the exact gap the xz backdoor exploited.
+- **Known-malware detection** — recognizes OSV `MAL-…` malware advisories and flags the package as critical ("remove immediately").
+- **API-surface report** (`venom api`) — groups your dependencies by the external service each SDK talks to (Stripe, OpenAI, AWS, …) with per-service CVEs, freshness, and leaked keys.
+- **`venom install`** — the literal bouncer: vet, then install (or refuse).
+- **Five lockfile formats** — npm, pnpm, Yarn Classic, Yarn Berry, and PyPI, all into one graph.
+- **41 secret patterns**, CVSS v2 + v3.1 scoring, `--json`/`badge`/`--deterministic` output, and a `VenomError` code taxonomy.
 
 ## Try it
 
