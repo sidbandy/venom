@@ -48,4 +48,24 @@ describe('computeReachablePackages', () => {
     expect(reachable.has('npm:b@1.0.0')).toBe(false); // declared but never imported
     expect(reachable.has('npm:d@1.0.0')).toBe(false); // only reachable via b
   });
+
+  it('returns an empty set when there is no analyzable source (reachability unknown)', async () => {
+    // A project with no JS/TS source (e.g. a pure-Python project) yields no
+    // reachable packages. auditProject treats this empty set as "reachability
+    // unknown" and must NOT down-weight CVEs — asserted here as the boundary
+    // condition that the audit gate (`reachabilityAnalyzed`) depends on.
+    const dir = await mkdtemp(join(tmpdir(), 'venom-reach-empty-'));
+    tmpDirs.push(dir);
+
+    const nodes = new Map<string, DependencyNode>();
+    nodes.set('npm:a@1.0.0', node('a', { direct: true }));
+    const graph: DependencyGraph = {
+      root: { name: 'demo', version: '1.0.0', path: dir },
+      ecosystems: ['npm'],
+      nodes,
+    };
+
+    const reachable = await computeReachablePackages(dir, graph);
+    expect(reachable.size).toBe(0);
+  });
 });

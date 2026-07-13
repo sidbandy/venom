@@ -17,8 +17,16 @@ function kinds(m: RegistryMetadata): string[] {
 }
 
 describe('assessMaintainerRisk', () => {
-  it('flags a single maintainer', () => {
-    expect(kinds(meta({ maintainers: [{ username: 'solo' }] }))).toContain('single-maintainer');
+  it('notes a single maintainer, but only at note level (not a caution on its own)', () => {
+    // Single-maintainer is extremely common among trusted packages; on its own it
+    // must stay informational (`note`) so it never forces a "caution" verdict.
+    const signals = assessMaintainerRisk(meta({ maintainers: [{ username: 'solo' }] }), {
+      now: NOW,
+    });
+    const single = signals.find((s) => s.kind === 'single-maintainer');
+    expect(single).toBeDefined();
+    expect(single?.level).toBe('note');
+    expect(signals.some((s) => s.level === 'warning')).toBe(false);
   });
 
   it('treats an empty maintainer list as unknown, not zero', () => {

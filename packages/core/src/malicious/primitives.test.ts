@@ -87,8 +87,32 @@ describe('scanSource (AST)', () => {
     expect(kinds).toContain('env-access');
     expect(kinds).toContain('network');
   });
+  it('detects dangerous modules pulled in via ESM, not just require', () => {
+    // Modern malware uses `import`, not `require` — every form must be caught.
+    expect(scanSource("import { exec } from 'child_process';").map((s) => s.kind)).toContain(
+      'child-process',
+    );
+    expect(scanSource("import cp from 'node:child_process';").map((s) => s.kind)).toContain(
+      'child-process',
+    );
+    expect(scanSource("export { spawn } from 'child_process';").map((s) => s.kind)).toContain(
+      'child-process',
+    );
+    expect(scanSource("export * from 'node:net';").map((s) => s.kind)).toContain('network');
+    expect(scanSource("import https from 'https';").map((s) => s.kind)).toContain('network');
+  });
+  it('detects dynamic import() of a dangerous module', () => {
+    const kinds = scanSource("const cp = await import('child_process');").map((s) => s.kind);
+    expect(kinds).toContain('child-process');
+  });
+  it('detects obfuscated computed env access (process["env"])', () => {
+    const kinds = scanSource('const t = process["env"]["NPM_TOKEN"];').map((s) => s.kind);
+    expect(kinds).toContain('env-access');
+  });
   it('returns nothing for benign code', () => {
     expect(scanSource('export const add = (a, b) => a + b;')).toEqual([]);
+    // A safe ESM import must not be mistaken for a dangerous one.
+    expect(scanSource("import { readFile } from 'node:fs/promises';")).toEqual([]);
   });
 });
 

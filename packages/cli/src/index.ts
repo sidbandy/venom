@@ -76,13 +76,16 @@ program
         console.log(
           `  Dependencies : ${inv.total} (${inv.direct} direct, ${inv.transitive} transitive) · ${eco} · max depth ${inv.maxDepth}`,
         );
+        const reachSuffix = result.reachabilityAnalyzed
+          ? ` — ${result.reachableVulnerabilities.length} reachable from your code`
+          : '';
         console.log(
           `  Vulnerabilities : ${v.total}` +
             (v.total
               ? ` (${v.bySeverity.critical} critical, ${v.bySeverity.high} high, ` +
                 `${v.bySeverity.medium} medium, ${v.bySeverity.low} low` +
                 (v.knownExploited ? `; ${v.knownExploited} actively exploited` : '') +
-                `) — ${result.reachableVulnerabilities.length} reachable from your code`
+                `)${reachSuffix}`
               : ''),
         );
         const flagged = assessments.filter((a) => a.verdict === 'flagged').length;
@@ -108,7 +111,10 @@ program
         // Reachable CVEs first — those are the ones that can actually hurt you.
         const vulnFindings = result.findings
           .filter((f) => f.category === 'vulnerability')
-          .sort((a, b) => Number(b.properties?.reachable) - Number(a.properties?.reachable));
+          .sort(
+            (a, b) =>
+              Number(Boolean(b.properties?.reachable)) - Number(Boolean(a.properties?.reachable)),
+          );
         for (const f of vulnFindings.slice(0, 12)) {
           const mark = f.level === 'error' ? '✖' : f.level === 'warning' ? '▲' : '·';
           const reach = f.properties?.reachable ? ' ⟶ reachable' : '';
@@ -624,6 +630,7 @@ function auditToJson(result: AuditResult): Record<string, unknown> {
     healthScore: result.healthScore,
     summary: result.summary,
     vulnerabilities: result.vulnerabilities,
+    reachabilityAnalyzed: result.reachabilityAnalyzed,
     reachableVulnerabilityCount: result.reachableVulnerabilities.length,
     assessments: result.assessments,
     secrets: result.secrets,

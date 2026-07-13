@@ -39,11 +39,17 @@ export function assessMaintainerRisk(
   // An empty list means "unknown" (some registries — notably PyPI's JSON API —
   // don't expose maintainer accounts), NOT "zero maintainers". We only emit a
   // signal when we positively know there is exactly one.
+  //
+  // This is a `note`, not a `warning`: a huge share of legitimate, trusted
+  // packages have exactly one maintainer, so on its own it must not push a
+  // package to a "caution" verdict — it's context that matters in combination
+  // with the genuinely alarming signals below (a brand-new or deprecated
+  // single-maintainer package still surfaces caution via those).
   if (meta.maintainers.length === 1) {
     signals.push({
       kind: 'single-maintainer',
       detail: 'Single maintainer — a single point of compromise or burnout-driven handoff',
-      level: 'warning',
+      level: 'note',
     });
   }
 

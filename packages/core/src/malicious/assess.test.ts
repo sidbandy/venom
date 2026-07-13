@@ -137,12 +137,29 @@ describe('assessPackage', () => {
     expect(result.findings.map((f) => f.ruleId)).toContain('venom/install-script');
   });
 
-  it('cautions on a single-maintainer package', async () => {
+  it('stays clear on a single-maintainer package but surfaces it as context', async () => {
+    // Single-maintainer is extremely common among trusted packages, so on its own
+    // it must NOT produce a caution — it is reported as a note, not a verdict.
     const meta = { ...healthyMeta('solo-lib'), maintainers: [{ username: 'solo' }] };
     const adapter = new FakeAdapter({ popular: [], meta });
     const result = await assessPackage(adapter, ref('solo-lib'), ctx(), { now: NOW });
-    expect(result.verdict).toBe('caution');
+    expect(result.verdict).toBe('clear');
     expect(result.findings.map((f) => f.ruleId)).toContain('venom/maintainer-risk');
+    expect(result.findings.find((f) => f.ruleId === 'venom/maintainer-risk')?.level).toBe('note');
+  });
+
+  it('cautions when a single maintainer is combined with a genuinely alarming signal', async () => {
+    // The fix must not weaken real detection: a brand-new single-maintainer
+    // package (the event-stream/one-off-attack shape) still surfaces caution.
+    const meta = {
+      ...healthyMeta('solo-lib'),
+      maintainers: [{ username: 'solo' }],
+      createdAt: '2026-07-05T00:00:00Z', // days before NOW
+    };
+    const adapter = new FakeAdapter({ popular: [], meta });
+    const result = await assessPackage(adapter, ref('solo-lib'), ctx(), { now: NOW });
+    expect(result.verdict).toBe('caution');
+    expect(result.reasons.join(' ')).toMatch(/first published/i);
   });
 
   it('deep-scans package source for exfiltration patterns', async () => {

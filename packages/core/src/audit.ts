@@ -39,6 +39,13 @@ export interface AuditResult {
   unusedDependencies: string[];
   /** Package keys reachable from the project's own source imports (Bigger bets). */
   reachablePackages: ReadonlySet<string>;
+  /**
+   * Whether reachability was actually established (the project's source could be
+   * analyzed and imports at least one resolved package). When false, reachability
+   * is treated as *unknown*: CVEs are scored at full weight rather than being
+   * optimistically de-prioritized, and the "reachable" count is not reported.
+   */
+  reachabilityAnalyzed: boolean;
   /** The subset of `vulnerabilities` in packages the project's code can actually reach. */
   reachableVulnerabilities: Vulnerability[];
   healthScore: HealthScore;
@@ -64,16 +71,23 @@ export async function auditProject(
   const { assessments, findings: malFindings } = await scanMalicious(graph, ctx);
 
   // Reachability: which packages the project's own code can actually reach.
+  // Only meaningful when we resolved a non-empty reachable set from the project's
+  // source imports. An empty set means reachability could not be established (a
+  // non-JS project, or unparseable source) — treating every CVE as "unreachable"
+  // there would optimistically deflate real exposure, so we don't.
   const reachablePackages = await computeReachablePackages(ctx.projectRoot, graph);
-  const reachableVulnerabilities = vulnerabilities.filter((v) =>
-    reachablePackages.has(packageKey(v.affected)),
-  );
-  for (const f of vulnFindings) {
-    if (f.relatedPackage) {
-      f.properties = {
-        ...f.properties,
-        reachable: reachablePackages.has(packageKey(f.relatedPackage)),
-      };
+  const reachabilityAnalyzed = reachablePackages.size > 0;
+  const reachableVulnerabilities = reachabilityAnalyzed
+    ? vulnerabilities.filter((v) => reachablePackages.has(packageKey(v.affected)))
+    : [];
+  if (reachabilityAnalyzed) {
+    for (const f of vulnFindings) {
+      if (f.relatedPackage) {
+        f.properties = {
+          ...f.properties,
+          reachable: reachablePackages.has(packageKey(f.relatedPackage)),
+        };
+      }
     }
   }
   // scanSecrets treats undefined history/breachCheck as its defaults (both true).
@@ -102,7 +116,7 @@ export async function auditProject(
     assessments,
     secrets,
     updatePlan,
-    reachablePackages,
+    ...(reachabilityAnalyzed ? { reachablePackages } : {}),
   });
 
   return {
@@ -114,6 +128,7 @@ export async function auditProject(
     updatePlan,
     unusedDependencies: unused,
     reachablePackages,
+    reachabilityAnalyzed,
     reachableVulnerabilities,
     healthScore,
     findings: [

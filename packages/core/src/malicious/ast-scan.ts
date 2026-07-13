@@ -66,20 +66,32 @@ export function scanSource(code: string): AstSignal[] {
     signals.push({ kind, detail, ...(line !== undefined ? { line } : {}) });
   };
 
+  // Flag a dangerous module regardless of *how* it's pulled in (require, static
+  // `import`, dynamic `import()`, or `export … from`) — attackers use all four.
+  const flagModule = (mod: string | undefined, detail: string, line?: number): void => {
+    if (mod && DANGEROUS_MODULES.has(mod)) {
+      add(
+        NETWORK_MODULES.has(mod.replace(/^node:/, '')) ? 'network' : 'child-process',
+        detail,
+        line,
+      );
+    }
+  };
+
   traverse(ast, {
     CallExpression(path: NodePath) {
       const node = path.node as { callee?: unknown; arguments?: unknown[] };
       const callee = node.callee as Record<string, unknown> | undefined;
       const line = (path.node.loc?.start.line as number | undefined) ?? undefined;
 
-      // require('child_process') / import of dangerous modules
+      // require('child_process')
       const required = requiredModuleName(callee, node.arguments);
-      if (required && DANGEROUS_MODULES.has(required)) {
-        add(
-          NETWORK_MODULES.has(required.replace(/^node:/, '')) ? 'network' : 'child-process',
-          `require('${required}')`,
-          line,
-        );
+      if (required) flagModule(required, `require('${required}')`, line);
+
+      // dynamic import('child_process') — callee is the special `Import` node
+      if (callee?.type === 'Import') {
+        const mod = stringArg(node.arguments);
+        if (mod) flagModule(mod, `import('${mod}')`, line);
       }
 
       // eval(...) and new Function(...) handled below; here: direct eval call
@@ -99,17 +111,38 @@ export function scanSource(code: string): AstSignal[] {
         add('dynamic-eval', 'new Function(...)', path.node.loc?.start.line);
       }
     },
+    // Static `import … from 'child_process'`
+    ImportDeclaration(path) {
+      const src = path.node.source.value;
+      flagModule(src, `import '${src}'`, path.node.loc?.start.line);
+    },
+    // Re-export: `export … from 'child_process'`
+    ExportNamedDeclaration(path) {
+      const src = path.node.source?.value;
+      if (src) flagModule(src, `export from '${src}'`, path.node.loc?.start.line);
+    },
+    ExportAllDeclaration(path) {
+      const src = path.node.source.value;
+      flagModule(src, `export * from '${src}'`, path.node.loc?.start.line);
+    },
     MemberExpression(path: NodePath) {
-      // process.env access — where API keys and tokens live
+      // process.env access — where API keys and tokens live. Match both
+      // `process.env` and the obfuscated computed form `process['env']`.
       const node = path.node as {
         object?: Record<string, unknown>;
         property?: Record<string, unknown>;
       };
+      const prop = node.property;
+      const propName =
+        prop?.type === 'Identifier'
+          ? prop.name
+          : prop?.type === 'StringLiteral'
+            ? prop.value
+            : undefined;
       if (
         node.object?.type === 'Identifier' &&
         node.object.name === 'process' &&
-        node.property?.type === 'Identifier' &&
-        node.property.name === 'env'
+        propName === 'env'
       ) {
         add('env-access', 'process.env access', path.node.loc?.start.line);
       }
@@ -121,9 +154,15 @@ export function scanSource(code: string): AstSignal[] {
 
 function requiredModuleName(callee: unknown, args: unknown[] | undefined): string | undefined {
   if (!isIdentifier(callee as Record<string, unknown>, 'require')) return undefined;
+  return stringArg(args);
+}
+
+/** The first argument's value if it's a string literal, else undefined. */
+function stringArg(args: unknown[] | undefined): string | undefined {
   const first = args?.[0] as Record<string, unknown> | undefined;
-  if (first?.type === 'StringLiteral' && typeof first.value === 'string') return first.value;
-  return undefined;
+  return first?.type === 'StringLiteral' && typeof first.value === 'string'
+    ? first.value
+    : undefined;
 }
 
 function isIdentifier(node: Record<string, unknown> | undefined, name: string): boolean {

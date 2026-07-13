@@ -6,10 +6,38 @@ build. Kept separate from `SPEC.md` (the product definition) — this is the
 
 **Legend:** 🔴 high value · 🟡 medium · 🟢 nice-to-have · ✅ done
 
-_Last updated: 2026-07-12 (post-V1 runway: reachability, version-diff, provenance,
-pnpm/Yarn Classic+Berry, 41 secret patterns, CVSS v2, --json/badge, error taxonomy)._
+_Last updated: 2026-07-13 (correctness-hardening pass: closed an ESM/dynamic-import
+malware-detection gap, made reachability scoring conservative when it can't be
+established, and fixed the single-maintainer false-caution)._
 
 ---
+
+## Detection correctness — audit findings & fixes (2026-07-13)
+
+A line-by-line correctness review of every checking algorithm (the priority: the
+checks must be right, not just the output). Verified sound as-is: HIBP k-anonymity
+(only the 5-char SHA-1 prefix ever leaves the machine), CVSS v2 + v3.1 scoring
+(hand-checked against the spec), the bounded Levenshtein cutoff, OSV batch/version
+alignment, the git-history hunk parser, and the secret-scanner's ReDoS-safe,
+entropy-gated patterns. Three real issues were found and fixed with regression tests:
+
+- ✅ **Malware AST scanner missed ESM.** `scanSource` only recognized
+  `require('child_process')` — it did **not** flag `import`, `export … from`, or
+  dynamic `import()` of dangerous modules, nor the obfuscated computed form
+  `process['env']`. Modern (ESM) malware would have slipped past the module/exfil
+  signals. Now all four import forms and computed env-access are detected; a benign
+  ESM import (`node:fs/promises`) still yields nothing. _(ast-scan.ts)_
+- ✅ **Reachability could deflate the score.** When the reachable set came back
+  empty — a non-JS project, or unparseable source — every CVE was treated as
+  "unreachable" and down-weighted 0.4×, making a vulnerable project look healthier.
+  Reachability is now gated behind `reachabilityAnalyzed`: when it can't be
+  established, CVEs are scored at full weight and the "reachable" count is omitted
+  rather than reported as a misleading zero. _(audit.ts)_
+- ✅ **Single-maintainer false-caution.** A lone maintainer is extremely common
+  among trusted packages, yet it was a `warning` that forced a "caution" verdict
+  (e.g. `@types/node`). Downgraded to a `note`: it's surfaced as context but only
+  escalates to caution in combination with a genuinely alarming signal (brand-new
+  or deprecated), so real event-stream-shaped risks still fire. _(maintainer-risk.ts)_
 
 ## Bigger bets — where Venom becomes category-leading
 
