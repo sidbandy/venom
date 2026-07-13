@@ -1,3 +1,4 @@
+import { parse as parseYaml } from 'yaml';
 import { packageKey } from '../types/ecosystem';
 import type { DependencyNode, DependencyScope, ProjectRoot } from '../types/graph';
 import { assignDepth, finalizeNodes, getOrCreateNode, type WorkingNode } from './working-graph';
@@ -9,38 +10,51 @@ export interface YarnPackageJson {
 }
 
 interface YarnBlock {
-  /** The `name@range` specs this resolved entry satisfies. */
+  /** The `name@range` (or `name@npm:range`) specs this resolved entry satisfies. */
   specs: string[];
   version?: string;
-  /** Declared dependency ranges: name → range. */
+  /** Declared dependency descriptors: name → range/descriptor. */
   deps: Record<string, string>;
 }
 
 /**
- * Parse a Yarn Classic (v1) `yarn.lock` into resolved dependency nodes. The format
- * is custom (not YAML/JSON): each block's header lists every `name@range` that
- * dedupes to one resolved version, which is exactly the mapping needed to resolve
- * edges. Direct dependencies come from package.json.
+ * Parse a `yarn.lock` — both Yarn Classic (v1, a custom format) and Yarn Berry
+ * (v2+, which is YAML) — into resolved dependency nodes feeding the npm graph.
+ * Each entry's header lists every descriptor that dedupes to one resolved
+ * version, which is exactly the mapping needed to resolve edges; direct
+ * dependencies come from package.json.
  */
 export function parseYarnLock(
   content: string,
   root: ProjectRoot,
   pkgJson: YarnPackageJson | null,
 ): DependencyNode[] {
-  const blocks = parseBlocks(content);
+  const blocks = content.includes('__metadata:') ? parseBerry(content) : parseClassic(content);
+  return buildFromBlocks(blocks, root, pkgJson);
+}
+
+/** Shared: turn resolved blocks + the manifest into dependency nodes. */
+function buildFromBlocks(
+  blocks: YarnBlock[],
+  _root: ProjectRoot,
+  pkgJson: YarnPackageJson | null,
+): DependencyNode[] {
   const specToVersion = new Map<string, string>();
   const working = new Map<string, WorkingNode>();
 
-  // First pass: a node per resolved block, and the spec → version map.
   for (const block of blocks) {
     if (!block.version || block.specs.length === 0) continue;
     const name = nameFromSpec(block.specs[0]!);
     if (!name) continue;
     getOrCreateNode(working, { ecosystem: 'npm', name, version: block.version });
-    for (const spec of block.specs) specToVersion.set(spec, block.version);
+    for (const spec of block.specs) {
+      // Register both the raw descriptor and a protocol-stripped form, so both
+      // Berry (`name@npm:range`) and manifest (`name@range`) lookups resolve.
+      specToVersion.set(spec, block.version);
+      specToVersion.set(stripProtocol(spec), block.version);
+    }
   }
 
-  // Second pass: resolve edges via the spec map.
   for (const block of blocks) {
     if (!block.version) continue;
     const name = nameFromSpec(block.specs[0] ?? '');
@@ -49,7 +63,9 @@ export function parseYarnLock(
     const parent = working.get(parentKey);
     if (!parent) continue;
     for (const [depName, depRange] of Object.entries(block.deps)) {
-      const childVersion = specToVersion.get(`${depName}@${depRange}`);
+      const childVersion =
+        specToVersion.get(`${depName}@${depRange}`) ??
+        specToVersion.get(stripProtocol(`${depName}@${depRange}`));
       if (!childVersion) continue;
       const childKey = packageKey({ ecosystem: 'npm', name: depName, version: childVersion });
       const child = working.get(childKey);
@@ -60,7 +76,6 @@ export function parseYarnLock(
     }
   }
 
-  // Direct dependencies from the manifest.
   const seeds: string[] = [];
   const sections: Array<[Record<string, string> | undefined, DependencyScope]> = [
     [pkgJson?.devDependencies, 'development'],
@@ -69,7 +84,8 @@ export function parseYarnLock(
   ];
   for (const [deps, scope] of sections) {
     for (const [name, range] of Object.entries(deps ?? {})) {
-      const version = specToVersion.get(`${name}@${range}`);
+      const version =
+        specToVersion.get(`${name}@${range}`) ?? specToVersion.get(`${name}@npm:${range}`);
       if (!version) continue;
       const node = getOrCreateNode(working, { ecosystem: 'npm', name, version });
       node.direct = true;
@@ -80,25 +96,44 @@ export function parseYarnLock(
   }
 
   assignDepth(working, seeds);
-  void root;
   return finalizeNodes(working);
 }
 
-function parseBlocks(content: string): YarnBlock[] {
+/** Yarn Berry (v2+): the lockfile is YAML. */
+function parseBerry(content: string): YarnBlock[] {
+  let doc: Record<string, { version?: string; dependencies?: Record<string, string> }>;
+  try {
+    doc = parseYaml(content) as typeof doc;
+  } catch {
+    return [];
+  }
+  const blocks: YarnBlock[] = [];
+  for (const [key, entry] of Object.entries(doc)) {
+    if (key === '__metadata' || !entry || typeof entry !== 'object') continue;
+    const block: YarnBlock = { specs: key.split(',').map((s) => unquote(s.trim())), deps: {} };
+    if (entry.version) block.version = entry.version;
+    for (const [depName, descriptor] of Object.entries(entry.dependencies ?? {})) {
+      block.deps[depName] = String(descriptor);
+    }
+    blocks.push(block);
+  }
+  return blocks;
+}
+
+/** Yarn Classic (v1): a custom, indentation-based format. */
+function parseClassic(content: string): YarnBlock[] {
   const blocks: YarnBlock[] = [];
   const lines = content.split(/\r?\n/);
   let i = 0;
   while (i < lines.length) {
     const line = lines[i]!;
-    // A block header is a non-indented, non-comment line ending in ':'.
     if (!line || line.startsWith('#') || /^\s/.test(line) || !line.trimEnd().endsWith(':')) {
       i++;
       continue;
     }
     const header = line.trimEnd().replace(/:$/, '');
-    const specs = header.split(',').map((s) => unquote(s.trim()));
+    const block: YarnBlock = { specs: header.split(',').map((s) => unquote(s.trim())), deps: {} };
     i++;
-    const block: YarnBlock = { specs, deps: {} };
     let inDeps = false;
     while (i < lines.length && /^\s/.test(lines[i]!)) {
       const l = lines[i]!;
@@ -117,12 +152,17 @@ function parseBlocks(content: string): YarnBlock[] {
   return blocks;
 }
 
-/** The package name from a `name@range` spec (handles scoped names). */
+/** The package name from a `name@range` / `name@npm:range` spec (handles scopes). */
 function nameFromSpec(spec: string): string | null {
   const s = unquote(spec);
   const at = s.lastIndexOf('@');
   if (at <= 0) return null;
   return s.slice(0, at);
+}
+
+/** Drop a Berry protocol from a descriptor: `name@npm:^1.0.0` → `name@^1.0.0`. */
+function stripProtocol(spec: string): string {
+  return spec.replace('@npm:', '@');
 }
 
 function unquote(s: string): string {

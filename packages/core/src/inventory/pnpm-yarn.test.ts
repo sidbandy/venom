@@ -120,3 +120,44 @@ describe('NpmAdapter — yarn.lock (classic v1)', () => {
     });
   });
 });
+
+describe('NpmAdapter — yarn.lock (Berry v2+, YAML)', () => {
+  it('resolves versions, edges, depth, and scopes', async () => {
+    const dir = await writeProject({
+      'package.json': PACKAGE_JSON,
+      'yarn.lock': [
+        '__metadata:',
+        '  version: 8',
+        '',
+        '"a@npm:^1.0.0":',
+        '  version: 1.0.0',
+        '  resolution: "a@npm:1.0.0"',
+        '  dependencies:',
+        '    b: "npm:^3.0.0"',
+        '',
+        '"b@npm:^3.0.0":',
+        '  version: 3.0.0',
+        '  resolution: "b@npm:3.0.0"',
+        '',
+        '"d@npm:^2.0.0":',
+        '  version: 2.0.0',
+        '  resolution: "d@npm:2.0.0"',
+        '',
+      ].join('\n'),
+    });
+
+    const nodes = byKey((await new NpmAdapter().parseProject(dir))!.nodes);
+    expect(nodes.get('npm:a@1.0.0')).toMatchObject({
+      direct: true,
+      depth: 1,
+      scopes: ['production'],
+    });
+    expect(nodes.get('npm:a@1.0.0')!.dependencies).toEqual(['npm:b@3.0.0']);
+    expect(nodes.get('npm:b@3.0.0')).toMatchObject({ direct: false, depth: 2 });
+    expect(nodes.get('npm:d@2.0.0')).toMatchObject({
+      direct: true,
+      depth: 1,
+      scopes: ['development'],
+    });
+  });
+});
