@@ -96,6 +96,13 @@ describe('assessPackage', () => {
     expect(result.findings).toHaveLength(0);
   });
 
+  it('surfaces build provenance status from metadata', async () => {
+    const withProv = new FakeAdapter({ meta: { ...healthyMeta('lib'), hasProvenance: true } });
+    expect((await assessPackage(withProv, ref('lib'), ctx(), { now: NOW })).provenance).toBe(true);
+    const noProv = new FakeAdapter({ meta: healthyMeta('lib') });
+    expect((await assessPackage(noProv, ref('lib'), ctx(), { now: NOW })).provenance).toBe(false);
+  });
+
   it('flags a typosquat of a popular package', async () => {
     const adapter = new FakeAdapter({ popular: ['requests'], meta: null });
     const result = await assessPackage(adapter, ref('reqeusts'), ctx(), { metadata: false });

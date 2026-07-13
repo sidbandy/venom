@@ -25,6 +25,12 @@ export interface RegistryMetadata {
   repositoryUrl?: string;
   homepage?: string;
   deprecated?: boolean;
+  /**
+   * True if this version was published with a signed build-provenance attestation
+   * (npm/SLSA), which cryptographically links the published artifact to its source
+   * repo and CI build — the gap the xz backdoor exploited.
+   */
+  hasProvenance?: boolean;
   /** True if the package declares install lifecycle scripts (npm). */
   hasInstallScripts?: boolean;
   /** Lifecycle script name → command, when available (for install-script inspection). */

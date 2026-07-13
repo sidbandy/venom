@@ -28,11 +28,12 @@ would move Venom from "a good SCA tool" to something genuinely ahead of the mark
   capabilities (child_process, eval, network, obfuscation), and entropy spikes.
   This catches the event-stream/xz _update_ pattern. **Next:** run it automatically
   in CI on every dependency bump (diff base vs PR lockfile).
-- 🔴 **Provenance & source↔artifact verification.** Verify npm provenance / Sigstore
-  attestations, and compare the published tarball against the upstream git tag —
-  the exact gap the xz backdoor exploited (malicious code in the release tarball
-  that wasn't in the repo). "This artifact does not match its source" is a killer
-  signal nobody surfaces well.
+- 🟡 **Provenance & source↔artifact verification.** Implemented: Venom detects
+  whether an npm package was published with a signed build-provenance attestation
+  (SLSA) and surfaces it in `venom check` (✓/·), and `venom diff` flags when a
+  version *drops* provenance it previously had. **Next:** fetch and cryptographically
+  verify the attestation (Sigstore), and compare the published tarball against the
+  upstream git tag — "this artifact does not match its source" is the exact xz gap.
 - 🔴 **AI-assisted triage & explanation (optional, local-respecting).** An opt-in
   layer that explains a finding in plain English ("this RCE is reachable via your
   `parseConfig` call"), triages a wall of findings by real-world impact, and drafts

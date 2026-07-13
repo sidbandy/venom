@@ -24,6 +24,11 @@ export interface PackageAssessment {
   /** Human-readable supporting reasons, in the order they were found. */
   reasons: string[];
   findings: Finding[];
+  /**
+   * Build-provenance status (npm/SLSA): `true` = a signed source→artifact
+   * attestation is published, `false` = none, `undefined` = not checked/unknown.
+   */
+  provenance?: boolean;
 }
 
 export interface AssessOptions {
@@ -150,7 +155,13 @@ export async function assessPackage(
     }
   }
 
-  return { ref: subject, verdict: toVerdict(findings), reasons, findings };
+  return {
+    ref: subject,
+    verdict: toVerdict(findings),
+    reasons,
+    findings,
+    ...(meta ? { provenance: meta.hasProvenance ?? false } : {}),
+  };
 }
 
 export interface MaliciousScanResult {

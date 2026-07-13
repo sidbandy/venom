@@ -574,6 +574,11 @@ function printAssessment(a: PackageAssessment): void {
   } else {
     for (const reason of a.reasons) console.log(`   → ${reason}`);
   }
+  if (a.provenance === true) {
+    console.log('   ✓ Verifiable build provenance (signed source→artifact attestation)');
+  } else if (a.provenance === false) {
+    console.log('   · No build provenance attestation');
+  }
   console.log('');
 }
 

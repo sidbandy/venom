@@ -58,7 +58,12 @@ type LicenseField = string | { type?: string } | undefined;
 
 interface PackumentVersion {
   version: string;
-  dist?: { tarball?: string; integrity?: string };
+  dist?: {
+    tarball?: string;
+    integrity?: string;
+    /** Present when the version was published with provenance (npm/SLSA). */
+    attestations?: { url?: string; provenance?: { predicateType?: string } };
+  };
   scripts?: Record<string, string>;
   license?: LicenseField;
   deprecated?: string;
@@ -154,6 +159,7 @@ export class NpmAdapter implements EcosystemAdapter {
       ...(repoUrl ? { repositoryUrl: repoUrl } : {}),
       ...(doc.homepage ? { homepage: doc.homepage } : {}),
       ...(versionInfo?.deprecated ? { deprecated: true } : {}),
+      ...(versionInfo?.dist?.attestations ? { hasProvenance: true } : {}),
       hasInstallScripts: Object.keys(scripts).length > 0,
       installScripts: scripts,
       ...(doc.versions ? { allVersions: Object.keys(doc.versions) } : {}),

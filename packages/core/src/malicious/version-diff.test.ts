@@ -105,6 +105,18 @@ describe('diffVersions', () => {
     expect(d.findings[0]?.ruleId).toBe('venom/version-diff');
   });
 
+  it('flags loss of build provenance between versions', async () => {
+    const a = await srcDir('export const x = 1;\n');
+    const b = await srcDir('export const x = 2;\n');
+    const adapter = new FakeAdapter({
+      '1.0.0': { meta: { ...meta('1.0.0', ['alice'], {}), hasProvenance: true }, dir: a },
+      '1.0.1': { meta: meta('1.0.1', ['alice'], {}), dir: b },
+    });
+    const d = await diffVersions('npm', 'pkg', '1.0.0', '1.0.1', ctx(), { adapter });
+    expect(d.provenanceLost).toBe(true);
+    expect(d.verdict).toBe('caution');
+  });
+
   it('is clear when nothing security-relevant changed', async () => {
     const a = await srcDir('export const x = 1;\n');
     const b = await srcDir('export const x = 2;\n');

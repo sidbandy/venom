@@ -35,6 +35,8 @@ export interface VersionDiff {
   to: string;
   maintainersAdded: string[];
   maintainersRemoved: string[];
+  /** True if the old version had build provenance and the new one dropped it. */
+  provenanceLost: boolean;
   /** Install lifecycle scripts newly present or changed in the new version. */
   installScriptsChanged: string[];
   /** Code capabilities that appear more in the new version than the old. */
@@ -84,6 +86,7 @@ export async function diffVersions(
   const maintainersAdded = [...toMaintainers].filter((m) => !fromMaintainers.has(m)).sort();
   const maintainersRemoved = [...fromMaintainers].filter((m) => !toMaintainers.has(m)).sort();
 
+  const provenanceLost = Boolean(metaFrom?.hasProvenance) && !metaTo?.hasProvenance;
   const installScriptsChanged = changedScripts(metaFrom, metaTo);
   const dangerousInstallScripts = inspectInstallScripts(metaTo?.installScripts)
     .filter(
@@ -103,6 +106,8 @@ export async function diffVersions(
   const reasons: string[] = [];
   if (maintainersAdded.length > 0)
     reasons.push(`New maintainer(s): ${maintainersAdded.join(', ')}`);
+  if (provenanceLost)
+    reasons.push('Build provenance was removed (the previous version had a signed attestation)');
   for (const s of dangerousInstallScripts) reasons.push(`New dangerous install script — ${s}`);
   for (const k of capabilitiesIntroduced) {
     reasons.push(
@@ -118,6 +123,7 @@ export async function diffVersions(
     dangerousInstallScripts.length > 0 || capabilitiesIntroduced.some((k) => FLAG_KINDS.has(k));
   const caution =
     maintainersAdded.length > 0 ||
+    provenanceLost ||
     installScriptsChanged.length > 0 ||
     entropyFileDelta > 0 ||
     capabilitiesIntroduced.length > 0;
@@ -131,6 +137,7 @@ export async function diffVersions(
     to,
     maintainersAdded,
     maintainersRemoved,
+    provenanceLost,
     installScriptsChanged,
     capabilitiesIntroduced,
     dangerousInstallScripts,
