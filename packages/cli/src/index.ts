@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -29,6 +30,7 @@ import {
   ScoreHistoryStore,
   NoSupportedLockfileError,
   type AuditResult,
+  type DependencyGraph,
   type Policy,
   type ScanContextHandle,
   type ScoreRecord,
@@ -204,26 +206,33 @@ program
   .argument('[dir]', 'project directory', '.')
   .option('-f, --format <format>', 'spdx | cyclonedx', 'cyclonedx')
   .option('-o, --output <file>', 'write to a file instead of stdout')
-  .action(async (dir: string, opts: { format: string; output?: string }) => {
-    const format = opts.format.toLowerCase();
-    if (format !== 'spdx' && format !== 'cyclonedx') {
-      console.error(`Unknown SBOM format "${opts.format}". Use "spdx" or "cyclonedx".`);
-      process.exitCode = 2;
-      return;
-    }
-    await withProject(dir, async (projectRoot) => {
-      const graph = await inventoryProject(projectRoot);
-      const output = generateSbom(graph, format as SbomFormat, { toolVersion: VERSION });
-      if (opts.output) {
-        writeFileSync(resolve(opts.output), output);
-        console.error(
-          `Wrote ${format.toUpperCase()} SBOM for ${graph.nodes.size} packages to ${opts.output}`,
-        );
-      } else {
-        console.log(output);
+  .option('--deterministic', 'stable document id + timestamp (reproducible for CI diffs)')
+  .action(
+    async (dir: string, opts: { format: string; output?: string; deterministic?: boolean }) => {
+      const format = opts.format.toLowerCase();
+      if (format !== 'spdx' && format !== 'cyclonedx') {
+        console.error(`Unknown SBOM format "${opts.format}". Use "spdx" or "cyclonedx".`);
+        process.exitCode = 2;
+        return;
       }
-    });
-  });
+      await withProject(dir, async (projectRoot) => {
+        const graph = await inventoryProject(projectRoot);
+        const sbomOptions = {
+          toolVersion: VERSION,
+          ...deterministicIdentity(graph, opts.deterministic),
+        };
+        const output = generateSbom(graph, format as SbomFormat, sbomOptions);
+        if (opts.output) {
+          writeFileSync(resolve(opts.output), output);
+          console.error(
+            `Wrote ${format.toUpperCase()} SBOM for ${graph.nodes.size} packages to ${opts.output}`,
+          );
+        } else {
+          console.log(output);
+        }
+      });
+    },
+  );
 
 program
   .command('fix')
@@ -594,6 +603,18 @@ function recordScore(ctx: ScanContextHandle, result: AuditResult): ScoreRecord[]
 
 function bar(score: number): string {
   return '█'.repeat(Math.round(score / 10)).padEnd(10, '░');
+}
+
+/** Derive a stable SBOM document identity from the graph content (for CI diffs). */
+function deterministicIdentity(
+  graph: DependencyGraph,
+  deterministic?: boolean,
+): { documentId?: string; timestamp?: string } {
+  if (!deterministic) return {};
+  const hash = createHash('sha256')
+    .update([...graph.nodes.keys()].sort().join('\n'))
+    .digest('hex');
+  return { documentId: hash.slice(0, 32), timestamp: '1970-01-01T00:00:00.000Z' };
 }
 
 /** A JSON-safe projection of an audit result (drops in-memory Maps/Sets). */

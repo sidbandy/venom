@@ -77,10 +77,9 @@ would move Venom from "a good SCA tool" to something genuinely ahead of the mark
   PyPI across hundreds of packages. Add a small `mapWithConcurrency(limit, …)`
   utility and prefer batch endpoints (OSV `/v1/querybatch`) before wiring those
   modules, so we never open 269 sockets at once.
-- 🟡 **Deterministic default document identity.** SBOMs are reproducible only when
-  a fixed `documentId`/`timestamp` is passed; the default uses a random UUID + now.
-  Add a `--deterministic` flag (or derive the serial from a content hash) so
-  default CI runs diff cleanly.
+- ✅ **Deterministic SBOM output.** `venom sbom --deterministic` derives the
+  document id from a content hash of the sorted package set and uses a fixed
+  timestamp, so repeated CI runs produce byte-identical SBOMs that diff cleanly.
 - ✅ **Shared error taxonomy.** Implemented: a `VenomError` base with stable
   `code`s (`OFFLINE`, `DISALLOWED_HOST`, `HTTP_ERROR`, `TARBALL_SECURITY`,
   `NO_LOCKFILE`); every engine error extends it. **Next:** map codes to distinct
