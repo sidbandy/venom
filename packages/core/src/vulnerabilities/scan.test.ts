@@ -124,6 +124,27 @@ describe('scanVulnerabilities', () => {
     expect(summary.bySeverity.high).toBe(1);
   });
 
+  it('flags a known-malicious package (OSV MAL- advisory) as critical', async () => {
+    const mal: OsvVulnerability = {
+      id: 'MAL-2024-1234',
+      summary: 'Package exfiltrates environment variables on install',
+      affected: [{ package: { ecosystem: 'npm', name: 'evil-pkg' } }],
+    };
+    const http = new FakeHttp({
+      vulnsByPackage: { 'evil-pkg': ['MAL-2024-1234'] },
+      vulnDetails: { 'MAL-2024-1234': mal },
+      kev: [],
+    });
+    const graph = graphWith({ ecosystem: 'npm', name: 'evil-pkg', version: '1.0.0' });
+
+    const { vulnerabilities, findings } = await scanVulnerabilities(graph, makeCtx(http));
+    expect(vulnerabilities[0]?.malicious).toBe(true);
+    expect(vulnerabilities[0]?.severity).toBe('critical');
+    expect(findings[0]?.ruleId).toBe('venom/malicious-package');
+    expect(findings[0]?.category).toBe('malicious');
+    expect(findings[0]?.title).toContain('KNOWN MALICIOUS PACKAGE');
+  });
+
   it('serves cached vuln ids on a second run without re-querying', async () => {
     let batchCalls = 0;
     const http = new FakeHttp({

@@ -18,7 +18,7 @@ export interface OsvVulnerability {
   affected?: OsvAffected[];
   references?: Array<{ type?: string; url: string }>;
   severity?: Array<{ type: string; score: string }>;
-  database_specific?: { severity?: string; cwe_ids?: string[] };
+  database_specific?: { severity?: string; cwe_ids?: string[]; malicious?: boolean };
   published?: string;
   modified?: string;
   /** Present (an ISO timestamp) when the advisory has been retracted. */

@@ -49,9 +49,11 @@ would move Venom from "a good SCA tool" to something genuinely ahead of the mark
 - 🟡 **Behavioral sandbox (dynamic analysis).** Execute install scripts inside an
   isolated sandbox (gVisor/Firecracker/container) and observe real syscalls and
   network egress — dynamic confirmation on top of the static AST/entropy signals.
-- 🟡 **Live malicious-package feed.** Subscribe to the npm/PyPI malware advisory
-  feeds and known-bad-package lists so Venom catches named, in-the-wild attacks
-  instantly — not only what its heuristics infer.
+- ✅ **Live malicious-package feed.** OSV aggregates the npm/PyPI malware advisories
+  (`MAL-…`), and Venom already queries OSV — so Module 2 now recognizes those
+  advisories, escalates the package to critical, and emits a distinct
+  `venom/malicious-package` finding ("KNOWN MALICIOUS PACKAGE — remove immediately").
+  Catches named, in-the-wild attacks, not just heuristic inference.
 - 🟢 **Blast-radius view & health badges.** Interactive graph of which features
   depend on a risky package (and what breaks if removed), plus a README
   `Supply Chain Health: 91/100` badge endpoint.

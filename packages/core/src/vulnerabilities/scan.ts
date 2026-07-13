@@ -87,9 +87,17 @@ export function summarizeVulnerabilities(vulns: Vulnerability[]): {
 function toVulnerability(osv: OsvVulnerability, ref: PackageRef, kev: Set<string>): Vulnerability {
   const aliases = osv.aliases ?? [];
   const cvss = pickCvss(osv.severity);
-  const severity = cvss
-    ? severityFromScore(cvss.baseScore)
-    : severityFromLabel(osv.database_specific?.severity);
+  // OSV aggregates the npm/PyPI *malware* advisories as `MAL-…`; such a package is
+  // known malware, not merely buggy — always critical.
+  const malicious =
+    osv.id.startsWith('MAL-') ||
+    aliases.some((a) => a.startsWith('MAL-')) ||
+    Boolean(osv.database_specific?.malicious);
+  const severity = malicious
+    ? 'critical'
+    : cvss
+      ? severityFromScore(cvss.baseScore)
+      : severityFromLabel(osv.database_specific?.severity);
   const knownExploited = [osv.id, ...aliases].some((id) => kev.has(id));
 
   return {
@@ -100,6 +108,7 @@ function toVulnerability(osv: OsvVulnerability, ref: PackageRef, kev: Set<string
     ...(cvss ? { cvss } : {}),
     severity,
     knownExploited,
+    ...(malicious ? { malicious: true } : {}),
     affected: ref,
     fixedVersions: extractFixedVersions(osv, ref),
     references: (osv.references ?? []).map((r) => r.url),
@@ -111,10 +120,32 @@ function toVulnerability(osv: OsvVulnerability, ref: PackageRef, kev: Set<string
 function toFinding(vuln: Vulnerability): Finding {
   const cveOrId = vuln.aliases.find((a) => a.startsWith('CVE-')) ?? vuln.id;
   const pkg = `${vuln.affected.name}@${vuln.affected.version}`;
+  const lowestFixed = lowestVersion(vuln.fixedVersions, vuln.affected.ecosystem);
+
+  // A known-malicious package is not a CVE to patch — it's malware to remove now.
+  if (vuln.malicious) {
+    return {
+      ruleId: 'venom/malicious-package',
+      level: 'error',
+      category: 'malicious',
+      title: `KNOWN MALICIOUS PACKAGE: ${pkg}`,
+      message: `${vuln.summary ?? 'This package is flagged as malware'} (OSV ${vuln.id}). Remove it immediately and rotate any exposed credentials.`,
+      locations: [{ uri: toPurl(vuln.affected) }],
+      fingerprint: `malicious::${packageKey(vuln.affected)}`,
+      relatedPackage: vuln.affected,
+      remediation: `Remove ${vuln.affected.name} immediately; it is known malware.`,
+      properties: {
+        osvId: vuln.id,
+        aliases: vuln.aliases,
+        malicious: true,
+        references: vuln.references,
+      },
+    };
+  }
+
   const level = findingLevel(vuln);
   const kevNote = vuln.knownExploited ? ' [CISA KEV — actively exploited in the wild]' : '';
   const cvssNote = vuln.cvss ? ` (CVSS ${vuln.cvss.baseScore})` : '';
-  const lowestFixed = lowestVersion(vuln.fixedVersions, vuln.affected.ecosystem);
 
   return {
     ruleId: `venom/${cveOrId}`,
